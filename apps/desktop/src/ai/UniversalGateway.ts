@@ -5,14 +5,13 @@ export type AIModelMode = 'fast' | 'standard' | 'thinking';
 
 export interface GenerateOptions {
     mode: AIModelMode;
-    image?: string; // Base64 string
+    image?: string;
 }
 
 export interface AIProvider {
     generateCode(prompt: string, context: string, options?: GenerateOptions): Promise<string>;
 }
 
-// Gemini Implementation
 class GeminiProvider implements AIProvider {
     private genAI: GoogleGenerativeAI;
 
@@ -21,13 +20,13 @@ class GeminiProvider implements AIProvider {
     }
 
     async generateCode(prompt: string, context: string, options: GenerateOptions = { mode: 'standard' }): Promise<string> {
-        let modelName = 'gemini-2.5-flash';
+        let modelName = 'gemini-2.0-flash';
 
-        // Smart Model Selection
+        // Enhanced Model Selection
         switch (options.mode) {
-            case 'fast': modelName = 'gemini-2.5-flash-lite'; break;
-            case 'thinking': modelName = 'gemini-2.5-pro'; break;
-            default: modelName = 'gemini-2.5-flash'; break
+            case 'fast': modelName = 'gemini-2.0-flash-lite-preview-02-05'; break;
+            case 'thinking': modelName = 'gemini-2.0-flash-thinking-exp-01-21'; break; // The "Brain"
+            default: modelName = 'gemini-2.0-flash'; break;
         }
 
         try {
@@ -49,7 +48,6 @@ class GeminiProvider implements AIProvider {
 
             const parts: any[] = [{ text: systemPrompt }, { text: `USER REQUEST: ${prompt}` }];
 
-            // Multimodal Input Handler
             if (options.image) {
                 const cleanBase64 = options.image.replace(/^data:image\/\w+;base64,/, "");
                 parts.push({ inlineData: { mimeType: "image/png", data: cleanBase64 } });
@@ -69,10 +67,8 @@ class GeminiProvider implements AIProvider {
     }
 }
 
-// Factory Pattern
 export class SynapseFactory {
     static create(_provider: string, apiKey: string): AIProvider {
-        // Currently defaulting to Gemini as it supports both vision and thinking modes best
-        return new GeminiProvider(apiKey);
+        return new GeminiProvider(apiKey); // Defaulting to Gemini for this demo
     }
 }

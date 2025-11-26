@@ -2,19 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import {
-  Files, Search, Settings, Minus, Square, X,
+  Files, Settings, Minus, Square, X,
   RefreshCw, Globe, Crosshair,
-  Zap, Paperclip, Brain, Rocket, ArrowUp, Bot
-
+  Zap, Paperclip, Brain, Rocket, ArrowUp, Bot, Trash2
 } from 'lucide-react';
 import { SynapseFactory } from './ai/UniversalGateway';
 import type { AIModelMode } from './ai/UniversalGateway';
 import { INSPECTOR_SCRIPT } from './ai/inspector';
 
-// Electron Interop (Safe requiring)
-const electron = window.require ? window.require('electron') : null;
-const ipcRenderer = electron ? electron.ipcRenderer : null;
-
+const { ipcRenderer } = window.require('electron');
 loader.config({ monaco });
 
 // Types
@@ -27,7 +23,7 @@ interface ChatMessage {
 
 interface SelectedContext {
   tag: string;
-  selector: string; // Full path: div#app > button.btn
+  selector: string;
   lineNumber: number;
   snippet: string;
 }
@@ -36,9 +32,9 @@ interface SelectedContext {
 
 const WindowControls = () => (
   <div className="flex items-center h-full px-1 no-drag">
-    <button onClick={() => ipcRenderer?.send('window:minimize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Minus size={14} /></button>
-    <button onClick={() => ipcRenderer?.send('window:maximize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Square size={12} /></button>
-    <button onClick={() => ipcRenderer?.send('window:close')} className="p-2 hover:bg-red-500 hover:text-white rounded-none transition-colors text-aether-textOnAccent"><X size={14} /></button>
+    <button onClick={() => ipcRenderer.send('window:minimize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Minus size={14} /></button>
+    <button onClick={() => ipcRenderer.send('window:maximize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Square size={12} /></button>
+    <button onClick={() => ipcRenderer.send('window:close')} className="p-2 hover:bg-red-500 hover:text-white rounded-none transition-colors text-aether-textOnAccent"><X size={14} /></button>
   </div>
 );
 
@@ -116,7 +112,7 @@ export default function AetherApp() {
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
   const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [code, setCode] = useState('// Synapse AntiGravity v2\n// Open a project to start...');
+  const [code, setCode] = useState('// Synapse AntiGravity v2.1\n// Select a file to begin...');
 
   // UI State
   const [isThinking, setIsThinking] = useState(false);
@@ -126,10 +122,12 @@ export default function AetherApp() {
   const [isInspectorActive, setIsInspectorActive] = useState(false);
   const [revealLine, setRevealLine] = useState<number | null>(null);
 
-  // AI & Chat State (Fixed: Now persistent)
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 'init', role: 'model', content: 'Ready. Select an element or type a command.' }
-  ]);
+  // AI & Persistent Chat
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem('synapse_chat_history');
+    return saved ? JSON.parse(saved) : [{ id: 'init', role: 'model', content: 'Synapse ready. Select an element (Inspect) or attach an image to edit.' }];
+  });
+
   const [aiMode, setAiMode] = useState<AIModelMode>('standard');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
@@ -138,76 +136,73 @@ export default function AetherApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll chat
+  // Persist Chat
   useEffect(() => {
+    localStorage.setItem('synapse_chat_history', JSON.stringify(messages));
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // File Handlers
+  const handleClearChat = () => {
+    if (confirm("Clear chat history?")) {
+      setMessages([{ id: Date.now().toString(), role: 'model', content: 'Chat cleared.' }]);
+    }
+  };
+
+  // Handlers
   const handleOpenFolder = async () => {
     try {
-      // @ts-ignore
       const path = await window.synapse.openDirectory();
       if (path) { setProjectPath(path); loadFiles(path); }
     } catch (e) { console.error(e); }
   };
 
   const loadFiles = async (path: string) => {
-    // @ts-ignore
     const fileList = await window.synapse.readDirectory(path);
     setFiles(fileList);
   };
 
   const handleFileClick = async (file: any) => {
     if (file.isDirectory) return;
-    // @ts-ignore
     const content = await window.synapse.readFile(file.path);
     setActiveFile(file.path);
     setCode(content);
   };
 
-  // Inspector Handler (Improved Locator)
+  // Smart Inspector Handler
   useEffect(() => {
     const handler = async (event: MessageEvent) => {
       if (event.data.type === 'ELEMENT_CLICKED') {
-        const { tag, id, text, selector, snippet } = event.data.payload;
-        console.log("Inspector Picked:", selector);
+        const { tag, id, selector, snippet } = event.data.payload;
+        console.log("Smart Selector:", selector);
 
         setIsInspectorActive(false);
         document.querySelector('iframe')?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: false }, '*');
 
-        // Basic Line Finding Logic
+        // Locator: Try to find the specific tag in the code
+        // This is a simple heuristic, in v3 we can use AST parsing
         const lines = code.split('\n');
         let foundLine = null;
 
-        // 1. Try finding ID match
+        // Priority 1: ID
         if (id) {
-          const idIdx = lines.findIndex(l => l.includes(`id="${id}"`) || l.includes(`id='${id}'`));
-          if (idIdx !== -1) foundLine = idIdx + 1;
+          const idx = lines.findIndex(l => l.includes(`id="${id}"`) || l.includes(`id='${id}'`));
+          if (idx > -1) foundLine = idx + 1;
         }
 
-        // 2. Try finding unique text match
-        if (!foundLine && text && text.length > 5) {
-          const textIdx = lines.findIndex(l => l.includes(text));
-          if (textIdx !== -1) foundLine = textIdx + 1;
-        }
-
-        // 3. Fallback to tag search (imprecise but better than nothing)
+        // Priority 2: Tag Name (Fallback)
         if (!foundLine) {
-          const tagIdx = lines.findIndex(l => l.includes(`<${tag}`));
-          if (tagIdx !== -1) foundLine = tagIdx + 1;
+          // Try to find the tag closer to where we might be looking (not perfect)
+          const idx = lines.findIndex(l => l.includes(`<${tag}`));
+          if (idx > -1) foundLine = idx + 1;
         }
 
-        if (foundLine) {
-          if (viewMode === 'preview') setViewMode('split');
-          setRevealLine(foundLine);
-          setSelectedContext({ tag, selector, lineNumber: foundLine, snippet });
-        } else {
-          // Even if line not found, set context so AI knows what to look for
-          setSelectedContext({ tag, selector, lineNumber: 0, snippet });
-        }
+        setRevealLine(foundLine);
+        if (viewMode === 'preview') setViewMode('split');
+
+        // Set Context with FULL SELECTOR
+        setSelectedContext({ tag, selector, lineNumber: foundLine || 0, snippet });
       }
     };
     window.addEventListener('message', handler);
@@ -268,42 +263,39 @@ export default function AetherApp() {
         `;
 
       if (selectedContext) {
-        prompt += `\n\nFOCUS CONTEXT:
-            - Selector: ${selectedContext.selector}
-            - Line Approx: ${selectedContext.lineNumber}
-            - Code Snippet: ${selectedContext.snippet}
+        prompt += `
             
-            Please locate this specific element in the file structure and apply changes there.
+            >>> FOCUS CONTEXT (Apply changes HERE):
+            TARGET SELECTOR: ${selectedContext.selector}
+            (The user clicked exactly this element. Be extremely specific.)
+            
+            HTML SNIPPET:
+            ${selectedContext.snippet}
             `;
       }
 
-      // Add placeholder bot message
       const botMsgId = (Date.now() + 1).toString();
-      setMessages(prev => [...prev, { id: botMsgId, role: 'model', content: 'Thinking...' }]);
+      setMessages(prev => [...prev, { id: botMsgId, role: 'model', content: 'Working on it...' }]);
 
-      // Call AI
       const newCode = await ai.generateCode(prompt, code, {
         mode: aiMode,
         image: newUserMsg.image
       });
 
-      // Update Code
-      setCode(newCode);
+      const cleanCode = newCode.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
+      setCode(cleanCode);
 
       if (activeFile) {
-        // @ts-ignore
-        await window.synapse.writeFile(activeFile, newCode);
+        await window.synapse.writeFile(activeFile, cleanCode);
         const currentUrl = new URL(previewUrl);
         currentUrl.searchParams.set('t', Date.now().toString());
         setPreviewUrl(currentUrl.toString());
         setIframeKey(k => k + 1);
       }
 
-      // Update Chat with Success
       setMessages(prev => prev.map(m =>
-        m.id === botMsgId ? { ...m, content: "Code updated successfully based on your request." } : m
+        m.id === botMsgId ? { ...m, content: "Updates applied successfully." } : m
       ));
-
       setSelectedContext(null);
 
     } catch (e: any) {
@@ -320,7 +312,7 @@ export default function AetherApp() {
       {/* TOP BAR */}
       <div className="h-9 bg-aether-accent flex items-center justify-between drag-region shrink-0 shadow-sm relative z-50">
         <div className="flex items-center px-3 gap-4 text-xs font-semibold text-aether-textOnAccent">
-          <div className="font-black tracking-tight mr-2 cursor-default select-none">AETHER v2</div>
+          <div className="font-black tracking-tight mr-2 cursor-default select-none">AETHER v2.1</div>
           <div className="hover:bg-black/5 px-2 py-1 rounded cursor-pointer transition-colors no-drag hidden md:block">File</div>
         </div>
 
@@ -349,12 +341,11 @@ export default function AetherApp() {
         {/* Sidebar Icons */}
         <div className="w-12 bg-aether-accent flex flex-col items-center py-4 gap-4 shrink-0 z-20">
           <button onClick={handleOpenFolder} className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent"><Files size={18} /></button>
-          <button className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent"><Search size={18} /></button>
           <div className="flex-1"></div>
           <button className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent"><Settings size={18} /></button>
         </div>
 
-        {/* File Tree */}
+        {/* Explorer */}
         <div className="w-60 bg-aether-sidebar border-r border-aether-border flex flex-col shrink-0">
           <div className="h-8 flex items-center px-4 text-[10px] font-bold tracking-wider text-aether-muted uppercase">
             {projectPath ? projectPath.split(/[\\/]/).pop() : 'NO FOLDER'}
@@ -362,7 +353,6 @@ export default function AetherApp() {
           <div className="flex-1 overflow-y-auto px-2 text-sm">
             {files.map((file, i) => (
               <div key={i} onClick={() => handleFileClick(file)} className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded-md transition-colors ${activeFile === file.path ? 'bg-white shadow-sm font-medium' : 'hover:bg-black/5'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${file.isDirectory ? 'bg-aether-accent' : 'bg-aether-border'}`}></span>
                 <span className="truncate text-xs">{file.name}</span>
               </div>
             ))}
@@ -381,9 +371,9 @@ export default function AetherApp() {
           </div>
         </div>
 
-        {/* RIGHT PANEL (CHAT) */}
+        {/* CHAT PANEL */}
         <div className="w-80 bg-aether-sidebar border-l border-aether-border flex flex-col shrink-0">
-          {/* Model Selector */}
+          {/* Models */}
           <div className="p-4 border-b border-aether-border bg-aether-sidebar">
             <div className="flex bg-aether-bg border border-aether-border rounded-lg p-1">
               {(['fast', 'standard', 'thinking'] as AIModelMode[]).map((m) => (
@@ -394,6 +384,7 @@ export default function AetherApp() {
                     ? 'bg-aether-accent text-aether-textOnAccent shadow-sm'
                     : 'text-aether-muted hover:bg-black/5'
                     }`}
+                  title={m}
                 >
                   {m === 'fast' && <Rocket size={12} />}
                   {m === 'standard' && <Zap size={12} />}
@@ -404,7 +395,7 @@ export default function AetherApp() {
             </div>
           </div>
 
-          {/* Message History */}
+          {/* Messages */}
           <div className="flex-1 p-4 overflow-y-auto space-y-4 scroll-smooth" ref={chatScrollRef}>
             {messages.map((msg) => (
               <div key={msg.id} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -419,27 +410,25 @@ export default function AetherApp() {
                 </div>
               </div>
             ))}
-
             {isThinking && (
               <div className="flex items-center gap-2 text-aether-accent animate-pulse px-2">
                 <Bot size={14} />
-                <span className="text-xs font-medium">Processing...</span>
+                <span className="text-xs font-medium">AI is working...</span>
               </div>
             )}
           </div>
 
-          {/* Selected Context Indicator */}
+          {/* Context & Input */}
           {selectedContext && (
             <div className="px-4 py-2 bg-aether-selection/50 border-t border-aether-border flex items-center gap-2 text-xs">
               <Crosshair size={12} className="text-aether-accent" />
-              <span className="font-mono truncate flex-1" title={selectedContext.selector}>
+              <span className="font-mono truncate flex-1 font-bold text-aether-accent" title={selectedContext.selector}>
                 {selectedContext.selector}
               </span>
               <button onClick={() => setSelectedContext(null)} className="hover:text-red-500"><X size={12} /></button>
             </div>
           )}
 
-          {/* Input Area */}
           <div className="p-4 border-t border-aether-border bg-white/50">
             {attachedImage && (
               <div className="flex items-center gap-2 mb-2 bg-white border border-aether-border px-2 py-1 rounded-md w-fit shadow-sm">
@@ -452,12 +441,15 @@ export default function AetherApp() {
               <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
               <button onClick={() => fileInputRef.current?.click()} className="mb-1 text-aether-muted hover:text-aether-accent"><Paperclip size={16} /></button>
 
+              {/* Clear Chat Button Hidden Shortcut */}
+              <button onClick={handleClearChat} className="mb-1 text-aether-muted hover:text-red-500" title="Clear Chat"><Trash2 size={14} /></button>
+
               <textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 disabled={isThinking}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAskAI())}
-                placeholder="Ask Synapse..."
+                placeholder={isThinking ? (aiMode === 'thinking' ? "Reasoning deeply..." : "Generating...") : "Ask Synapse..."}
                 className="flex-1 bg-transparent outline-none text-sm font-medium text-aether-text placeholder:text-aether-muted resize-none py-1 max-h-32 min-h-[24px]"
                 rows={1}
                 style={{ fieldSizing: 'content' } as any}

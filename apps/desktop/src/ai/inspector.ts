@@ -2,32 +2,58 @@ export const INSPECTOR_SCRIPT = `
 (function() {
   let active = false;
   let hoveredElement = null;
-  const OUTLINE_STYLE = '2px solid #d97706'; // Amber-600 to match Aether theme
+  const OUTLINE_STYLE = '2px solid #d97706'; // Amber-600
 
-  // Helper: Generate unique CSS selector
+  // Helper: Generate precise CSS selector
   function getSelector(el) {
     if (el.tagName.toLowerCase() === 'html') return 'html';
     if (el.tagName.toLowerCase() === 'body') return 'body';
     
     let str = el.tagName.toLowerCase();
+    
+    // 1. ID is best
     if (el.id) {
       str += '#' + el.id;
-    } else if (el.className && typeof el.className === 'string') {
-      const classes = el.className.split(/\\s+/).filter(c => c !== 'outline-amber-600'); 
+      return str; // ID is unique, no need for more
+    } 
+    
+    // 2. Classes
+    if (el.className && typeof el.className === 'string') {
+      const classes = el.className.split(/\\s+/).filter(c => 
+        c !== 'outline-amber-600' && !c.startsWith('hover:') // Filter utility states if needed
+      ); 
       if (classes.length > 0) {
-        str += '.' + classes.join('.');
+        // Use only the first 2 classes to avoid overly specific tailwind selectors that might confuse AI
+        str += '.' + classes.slice(0, 2).join('.');
       }
     }
+
+    // 3. Nth-of-type (Crucial for lists/grids)
+    if (el.parentElement) {
+      const siblings = Array.from(el.parentElement.children).filter(child => child.tagName === el.tagName);
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(el) + 1;
+        str += \`:nth-of-type(\${index})\`;
+      }
+    }
+
     return str;
   }
 
   function getPath(el) {
     const path = [];
-    while (el && el.nodeType === Node.ELEMENT_NODE) {
-        let selector = getSelector(el);
+    let current = el;
+    
+    // Climb up to 4 levels or until Body/ID
+    let depth = 0;
+    while (current && current.nodeType === Node.ELEMENT_NODE && depth < 4) {
+        let selector = getSelector(current);
         path.unshift(selector);
-        el = el.parentElement;
-        if (selector.includes('#')) break; // Stop at ID as it is unique
+        
+        if (current.id || current.tagName.toLowerCase() === 'body') break;
+        
+        current = current.parentElement;
+        depth++;
     }
     return path.join(' > ');
   }
@@ -59,19 +85,17 @@ export const INSPECTOR_SCRIPT = `
 
     const target = e.target;
     
-    // Clone and clean element to remove inspector styles
+    // Cleanup visual artifacts
     const clone = target.cloneNode(true);
     clone.style.outline = '';
-    clone.style.cursor = '';
-    if (target.getAttribute('style') === null) clone.removeAttribute('style');
-
+    
     const payload = {
         tag: target.tagName.toLowerCase(),
         id: target.id || null,
         className: target.className || null,
-        text: target.innerText.substring(0, 100), // Grab more context text
-        selector: getPath(target), // FULL CSS SELECTOR
-        snippet: clone.outerHTML
+        text: target.innerText.substring(0, 150).replace(/\\s+/g, ' '), // Clean whitespace
+        selector: getPath(target), // SMART SELECTOR
+        snippet: clone.outerHTML.substring(0, 500) // Limit snippet size
     };
     
     window.parent.postMessage({ type: 'ELEMENT_CLICKED', payload }, '*');
