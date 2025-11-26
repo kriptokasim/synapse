@@ -239,54 +239,81 @@ export default function AetherApp() {
 
       try {
         const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+        if (!apiKey) { alert("API Key Missing"); setIsThinking(false); return; }
         const ai = SynapseFactory.create('gemini', apiKey);
 
         let prompt = "";
 
-        // Context-Aware Prompting
-        if (selectedContext) {
+        // CONTEXT AWARE PROMPT
+        if (activeFile && code) {
           prompt = `
-                  I have selected a specific element in the code:
-                  - Tag: <${selectedContext.tag}>
-                  - Current Line: ${selectedContext.lineNumber}
-                  - Content: "${selectedContext.text}"
+                  I need to modify a file based on a user request.
+                  
+                  FILENAME: ${activeFile}
+                  
+                  CURRENT CODE:
+                  ${code}
                   
                   USER REQUEST: "${userPrompt}"
                   
-                  FULL CODE:
-                  ${code}
-                  
                   INSTRUCTIONS:
-                  1. Modify the code to fulfill the user request ONLY for the selected element.
-                  2. Return the FULL updated code file.
-                  3. Do not add markdown blocks. Just the code.
+                  1. Return the COMPLETE updated file content.
+                  2. Do not include any markdown formatting (no \`\`\`html or \`\`\`javascript).
+                  3. Do not add explanations. Just the raw code.
                 `;
+
+          // Add selection context if available
+          if (selectedContext) {
+            prompt += `
+                    FOCUS ON THIS ELEMENT:
+                    Tag: <${selectedContext.tag}>
+                    Content: "${selectedContext.text}"
+                    Line: ${selectedContext.lineNumber}
+                    `;
+          }
         } else {
-          // General Edit
-          prompt = `Request: "${userPrompt}". Code:\n${code}\nReturn updated code only.`;
+          alert("No file open!");
+          setIsThinking(false);
+          return;
         }
 
-        const newCode = await ai.generateCode(prompt, code);
+        console.log("Sending prompt to AI...");
+        let newCode = await ai.generateCode(prompt, code);
 
-        // Apply Changes
-        setCode(newCode);
+        // 🧹 CLEANUP: Remove Markdown Fences if present
+        newCode = newCode.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
 
-        // Auto-save if file is open
+        console.log("AI Response received. Writing to file...");
+
+        // APPLY & SAVE
+        setCode(newCode); // Update Editor
+
         if (activeFile) {
           await window.synapse.writeFile(activeFile, newCode);
-          // Force Iframe Reload to see changes
-          setIframeKey(k => k + 1);
+          console.log("File written successfully.");
+
+          // ⚡ FORCE RELOAD PREVIEW
+          // We add a timestamp to the URL to bust any cache
+          try {
+            const currentUrl = new URL(previewUrl);
+            currentUrl.searchParams.set('t', Date.now().toString());
+            setPreviewUrl(currentUrl.toString());
+          } catch (e) {
+            // Fallback if URL is invalid (e.g. about:blank)
+            console.warn("Could not update preview URL params", e);
+          }
+          setIframeKey(k => k + 1); // Hard remount
         }
 
-        // Clear input
+        // Clear Input
         (e.target as HTMLInputElement).value = '';
 
-      } catch (e) {
-        console.error(e);
-        alert("AI Edit Failed");
+      } catch (e: any) {
+        console.error("AI Edit Error:", e);
+        alert(`AI Error: ${e.message || e}`);
       } finally {
         setIsThinking(false);
-        setSelectedContext(null); // Clear context after edit
+        setSelectedContext(null);
       }
     }
   };
