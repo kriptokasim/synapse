@@ -26,8 +26,10 @@ function createWindow() {
     webPreferences: {
       preload: preloadPath,
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
       // Prototype mode
+      webSecurity: false
+      // ⚡ CRITICAL: Allows iframe script injection
     }
   });
   if (VITE_DEV_SERVER_URL) {

@@ -12,16 +12,17 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background-color: #fbf7ef;
-  color: #2b2926;
+  background-color: #FFFDF5;
+  /* Match aether-bg */
+  color: #2D261F;
   font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar Styling for that premium feel */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -29,12 +30,12 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #e6dfd0;
-  border-radius: 4px;
+  background: #E6E0D1;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a39060;
+  background: #D99A25;
 }
 
 /* Drag Region for Frameless Window */
@@ -44,4 +45,13 @@ body,
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* MONACO EDITOR HIGHLIGHT CLASS */
+/* This class is applied by the locator to flash the line */
+.monaco-editor .my-line-highlight {
+  background-color: rgba(217, 154, 37, 0.3) !important;
+  /* Amber with opacity */
+  border-left: 4px solid #D99A25;
+  transition: background-color 0.3s ease;
 }

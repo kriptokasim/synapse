@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import {
-  Settings, FolderGit2, Search, Zap,
-  Minus, Square, X, Sparkles, LayoutTemplate, Code, Eye, RefreshCw, Globe, Crosshair
+  Files, Search, GitGraph, Play, Bug, Settings, // Sidebar Icons
+  Minus, Square, X,                             // Window Controls
+  RefreshCw, Globe, Crosshair,                  // URL Bar
+  LayoutTemplate, Code, Eye,                    // View Controls
+  Check, AlertCircle, Terminal, Zap, Sparkles   // Status Bar & AI
 } from 'lucide-react';
 import { SynapseFactory } from './ai/UniversalGateway';
 import { INSPECTOR_SCRIPT } from './ai/inspector';
@@ -12,60 +15,73 @@ const { ipcRenderer } = window.require('electron');
 
 loader.config({ monaco });
 
-const THEME = {
-  bg: '#fbf7ef',
-  text: '#2b2926',
-  accent: '#d97706', // Updated to Amber
-  selection: '#fde68a',
-};
+// --- COMPONENTS ---
 
-// --- WINDOW CONTROLS ---
+// Window Controls (Designed for Gold Background)
 const WindowControls = () => (
-  <div className="flex items-center gap-2 px-4 no-drag">
-    <button onClick={() => ipcRenderer.send('window:minimize')} className="p-1.5 hover:bg-aether-surface rounded-md text-aether-muted hover:text-aether-text transition-colors"><Minus size={14} /></button>
-    <button onClick={() => ipcRenderer.send('window:maximize')} className="p-1.5 hover:bg-aether-surface rounded-md text-aether-muted hover:text-aether-text transition-colors"><Square size={12} /></button>
-    <button onClick={() => ipcRenderer.send('window:close')} className="p-1.5 hover:bg-red-100 hover:text-red-500 rounded-md text-aether-muted transition-colors"><X size={14} /></button>
+  <div className="flex items-center h-full px-1 no-drag">
+    <button onClick={() => ipcRenderer.send('window:minimize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Minus size={14} /></button>
+    <button onClick={() => ipcRenderer.send('window:maximize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Square size={12} /></button>
+    <button onClick={() => ipcRenderer.send('window:close')} className="p-2 hover:bg-red-500 hover:text-white rounded-none transition-colors text-aether-textOnAccent"><X size={14} /></button>
   </div>
 );
 
-// --- EDITOR COMPONENT ---
+// Editor with Matching Theme
+// Editor with Matching Theme
 const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: any, revealLine: number | null }) => {
   const monacoInstance = useMonaco();
-  const [editor, setEditor] = useState<any>(null);
+  const editorRef = useRef<any>(null);
+  const decorationsRef = useRef<string[]>([]); // Keep track of decorations to clear them
 
   useEffect(() => {
     if (monacoInstance) {
-      monacoInstance.editor.defineTheme('aether-amber', {
+      monacoInstance.editor.defineTheme('antigravity', {
         base: 'vs',
         inherit: true,
         rules: [
           { token: 'comment', foreground: '9ca3af', fontStyle: 'italic' },
-          { token: 'keyword', foreground: 'd97706', fontStyle: 'bold' }, // Amber Keyword
-          { token: 'string', foreground: '15803d' }, // Green for strings
-          { token: 'function', foreground: 'b45309' }, // Dark Amber for functions
-          { token: 'type', foreground: '2b2926', fontStyle: 'bold' },
+          { token: 'keyword', foreground: 'D99A25', fontStyle: 'bold' }, // Match Accent
+          { token: 'string', foreground: '5F8B59' }, // Sage Green
+          { token: 'function', foreground: 'B47F1E' },
+          { token: 'type', foreground: '2D261F', fontStyle: 'bold' },
         ],
         colors: {
-          'editor.background': THEME.bg,
-          'editor.foreground': THEME.text,
-          'editor.lineHighlightBackground': '#f0ebe0',
-          'editorLineNumber.foreground': '#d1cdc4',
-          'editorCursor.foreground': THEME.accent,
-          'editor.selectionBackground': THEME.selection,
-          'editor.inactiveSelectionBackground': '#f0ebe0',
+          'editor.background': '#FFFDF5',
+          'editor.foreground': '#2D261F',
+          'editor.lineHighlightBackground': '#F4F0E6',
+          'editorLineNumber.foreground': '#D6D3C4',
+          'editorCursor.foreground': '#D99A25',
+          'editor.selectionBackground': '#FCEEB5',
         }
       });
-      monacoInstance.editor.setTheme('aether-amber');
+      monacoInstance.editor.setTheme('antigravity');
     }
   }, [monacoInstance]);
 
+  // HIGHLIGHT LOGIC
   useEffect(() => {
-    if (editor && revealLine) {
+    if (editorRef.current && revealLine && monacoInstance) {
+      const editor = editorRef.current;
+
+      // 1. Scroll to position
       editor.revealLineInCenter(revealLine);
       editor.setPosition({ column: 1, lineNumber: revealLine });
       editor.focus();
+
+      // 2. Apply Decoration (Yellow Highlight)
+      // We use the ref to clear previous decorations first
+      decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
+        {
+          range: new monacoInstance.Range(revealLine, 1, revealLine, 1),
+          options: {
+            isWholeLine: true,
+            className: 'my-line-highlight', // Matches CSS
+            marginClassName: 'my-line-highlight-margin' // Optional margin indicator
+          }
+        }
+      ]);
     }
-  }, [revealLine, editor]);
+  }, [revealLine, monacoInstance]);
 
   return (
     <Editor
@@ -73,7 +89,7 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
       defaultLanguage="typescript"
       value={code}
       onChange={(val) => setCode(val || '')}
-      onMount={(editor) => setEditor(editor)}
+      onMount={(editor) => { editorRef.current = editor; }}
       options={{
         minimap: { enabled: false },
         fontFamily: "'JetBrains Mono', monospace",
@@ -84,40 +100,54 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
         overviewRulerBorder: false,
         renderLineHighlight: 'all',
         hideCursorInOverviewRuler: true,
-        scrollBeyondLastLine: false,
         automaticLayout: true,
       }}
     />
   );
 };
 
+// --- HELPER: LOCAL SEARCH STRATEGY ---
+function findLineLocal(code: string, tag: string, id: string | null, text: string): number | null {
+  const lines = code.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Strategy 1: ID Match (Strongest)
+    // Looks for id="value" or id='value'
+    if (id && (line.includes(`id="${id}"`) || line.includes(`id='${id}'`))) {
+      return i + 1;
+    }
+
+    // Strategy 2: Unique Text Match
+    // If the line contains the text and the tag name, it's a strong candidate
+    if (text && text.length > 5 && line.includes(text)) {
+      return i + 1;
+    }
+  }
+  return null;
+}
+
 // --- MAIN APP ---
 export default function AetherApp() {
+  // State
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
   const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [code, setCode] = useState('// Open a folder to start coding...');
+  const [code, setCode] = useState('// Synapse AntiGravity\n// Waiting for instructions...');
   const [isThinking, setIsThinking] = useState(false);
-
   const [viewMode, setViewMode] = useState<'code' | 'preview' | 'split'>('split');
   const [previewUrl, setPreviewUrl] = useState('http://localhost:3000');
   const [iframeKey, setIframeKey] = useState(0);
-
   const [isInspectorActive, setIsInspectorActive] = useState(false);
   const [revealLine, setRevealLine] = useState<number | null>(null);
 
-  // --- ACTIONS ---
+  // Handlers
   const handleOpenFolder = async () => {
     try {
       const path = await window.synapse.openDirectory();
-      if (path) {
-        setProjectPath(path);
-        loadFiles(path);
-      }
-    } catch (error) {
-      console.error("Failed to open directory:", error);
-      alert("Error opening folder.");
-    }
+      if (path) { setProjectPath(path); loadFiles(path); }
+    } catch (e) { console.error(e); }
   };
 
   const loadFiles = async (path: string) => {
@@ -130,6 +160,90 @@ export default function AetherApp() {
     const content = await window.synapse.readFile(file.path);
     setActiveFile(file.path);
     setCode(content);
+  };
+
+  // Locator Logic
+  useEffect(() => {
+    const handler = async (event: MessageEvent) => {
+      if (event.data.type === 'ELEMENT_CLICKED') {
+        const { tag, id, className, text, attributes } = event.data.payload;
+        console.log("Locating:", tag, id);
+
+        // 1. Disable Inspector
+        setIsInspectorActive(false);
+        const iframe = document.querySelector('iframe');
+        iframe?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: false }, '*');
+
+        // 2. TRY LOCAL SEARCH FIRST (Instant)
+        const localMatch = findLineLocal(code, tag, id, text);
+
+        if (localMatch) {
+          console.log("✅ Local Match found at line:", localMatch);
+          if (viewMode === 'preview') setViewMode('split');
+          setRevealLine(localMatch);
+          return; // Success! No need for AI.
+        }
+
+        // 3. FALLBACK TO AI (If local search fails)
+        setIsThinking(true);
+        try {
+          const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+          const ai = SynapseFactory.create('gemini', apiKey);
+
+          const prompt = `
+              I have an HTML/JSX element that I need to find in the source code.
+              
+              TARGET ELEMENT:
+              - Tag: <${tag}>
+              - Text: "${text}"
+              ${id ? `- ID: "${id}"` : ''}
+              ${className ? `- Class: "${className}"` : ''}
+              
+              SOURCE CODE:
+              ${code}
+              
+              INSTRUCTIONS:
+              Find the line number where this element is defined.
+              Return ONLY the number.
+            `;
+
+          const result = await ai.generateCode(prompt, code);
+          const lineNumber = parseInt(result.replace(/[^0-9]/g, ''));
+
+          if (!isNaN(lineNumber) && lineNumber > 0) {
+            console.log("🤖 AI Match found at line:", lineNumber);
+            if (viewMode === 'preview') setViewMode('split');
+            setRevealLine(lineNumber);
+          } else {
+            alert(`Could not locate element. (Try adding an ID to it)`);
+          }
+        } catch (e) {
+          console.error(e);
+          alert("Locator failed.");
+        } finally {
+          setIsThinking(false);
+        }
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [code, viewMode]);
+
+  const toggleInspector = () => {
+    const newState = !isInspectorActive;
+    setIsInspectorActive(newState);
+    document.querySelector('iframe')?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: newState }, '*');
+  };
+
+  const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+    try {
+      const doc = e.currentTarget.contentDocument;
+      if (doc) {
+        const script = doc.createElement('script');
+        script.text = INSPECTOR_SCRIPT;
+        doc.body.appendChild(script);
+      }
+    } catch (e) { }
   };
 
   const handleAskAI = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -148,188 +262,150 @@ export default function AetherApp() {
     }
   };
 
-  // --- INSPECTOR LOGIC ---
-  const toggleInspector = () => {
-    const newState = !isInspectorActive;
-    setIsInspectorActive(newState);
-
-    // Send message to iframe
-    const iframe = document.querySelector('iframe');
-    if (iframe && iframe.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'TOGGLE_INSPECTOR', active: newState }, '*');
-    }
-  };
-
-  // Handle messages from iframe
-  useEffect(() => {
-    const handler = async (event: MessageEvent) => {
-      if (event.data.type === 'ELEMENT_CLICKED') {
-        const { tag, text, snippet } = event.data.payload;
-        console.log("Selected:", tag, text);
-
-        setIsInspectorActive(false); // Turn off inspector
-        // Reset iframe visual
-        const iframe = document.querySelector('iframe');
-        iframe?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: false }, '*');
-
-        // AI LOCATOR
-        setIsThinking(true);
-        try {
-          const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
-          const ai = SynapseFactory.create('gemini', apiKey);
-
-          // Ask AI to find this code
-          const prompt = `
-              I clicked on an element in the preview. 
-              HTML: ${snippet}
-              Text Content: "${text}"
-              
-              Find this element in the current code. 
-              Return ONLY the line number where this element is defined.
-              Just the number.
-            `;
-
-          const result = await ai.generateCode(prompt, code);
-          const lineNumber = parseInt(result.trim());
-
-          if (!isNaN(lineNumber)) {
-            setRevealLine(lineNumber);
-          } else {
-            alert("Could not locate element in code.");
-          }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setIsThinking(false);
-        }
-      }
-    };
-
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, [code]); // Re-bind when code changes
-
-  // Inject script on iframe load
-  const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
-    const iframe = e.target as HTMLIFrameElement;
-    try {
-      const doc = iframe.contentDocument;
-      if (doc) {
-        const script = doc.createElement('script');
-        script.text = INSPECTOR_SCRIPT;
-        doc.body.appendChild(script);
-      }
-    } catch (err) {
-      console.warn("Could not inject inspector script (Cross-Origin limitation).");
-    }
-  };
-
   return (
-    <div className="flex h-screen w-screen bg-aether-bg text-aether-text font-sans overflow-hidden border border-aether-border rounded-lg shadow-2xl">
+    <div className="flex flex-col h-screen w-screen bg-aether-bg font-sans overflow-hidden">
 
-      {/* HEADER */}
-      <div className="absolute top-0 left-0 w-full h-10 z-50 flex justify-between items-center drag-region">
-        <div className="px-4 flex items-center gap-4">
-          <span className="text-xs font-bold tracking-widest text-aether-accent opacity-80">AETHER</span>
+      {/* --- 1. GOLDEN TOP BAR --- */}
+      <div className="h-9 bg-aether-accent flex items-center justify-between drag-region shrink-0 shadow-sm relative z-50">
 
-          {/* View Toggle */}
-          <div className="flex bg-aether-surface rounded-lg p-0.5 no-drag shadow-inner">
-            <button onClick={() => setViewMode('code')} className={`p-1 rounded transition-all ${viewMode === 'code' ? 'bg-white shadow text-aether-text' : 'text-aether-muted hover:text-aether-text'}`}><Code size={12} /></button>
-            <button onClick={() => setViewMode('split')} className={`p-1 rounded transition-all ${viewMode === 'split' ? 'bg-white shadow text-aether-text' : 'text-aether-muted hover:text-aether-text'}`}><LayoutTemplate size={12} /></button>
-            <button onClick={() => setViewMode('preview')} className={`p-1 rounded transition-all ${viewMode === 'preview' ? 'bg-white shadow text-aether-text' : 'text-aether-muted hover:text-aether-text'}`}><Eye size={12} /></button>
-          </div>
+        {/* Left: Menus */}
+        <div className="flex items-center px-3 gap-4 text-xs font-semibold text-aether-textOnAccent">
+          <div className="font-black tracking-tight mr-2 cursor-default select-none">AETHER</div>
+          <div className="hover:bg-black/5 px-2 py-1 rounded cursor-pointer transition-colors no-drag hidden md:block">File</div>
+          <div className="hover:bg-black/5 px-2 py-1 rounded cursor-pointer transition-colors no-drag hidden md:block">Edit</div>
+          <div className="hover:bg-black/5 px-2 py-1 rounded cursor-pointer transition-colors no-drag hidden md:block">View</div>
+        </div>
 
-          {/* URL BAR FIXED */}
-          <div className="flex items-center gap-2 bg-aether-surface px-2 py-1 rounded-md no-drag w-64 group focus-within:ring-1 focus-within:ring-aether-accent/30 transition-all shadow-inner">
-            <Globe size={10} className="text-aether-muted group-focus-within:text-aether-accent" />
+        {/* Center: URL & Tools */}
+        <div className="flex-1 max-w-2xl mx-4 no-drag h-6">
+          <div className="flex items-center w-full h-full bg-white/30 hover:bg-white/50 focus-within:bg-white rounded transition-all px-2 gap-2 border border-black/5 focus-within:border-transparent focus-within:shadow-md focus-within:text-black">
+            <Globe size={12} className="text-aether-textOnAccent opacity-60" />
             <input
               value={previewUrl}
               onChange={(e) => setPreviewUrl(e.target.value)}
-              className="bg-transparent border-none outline-none ring-0 text-[10px] w-full font-mono text-aether-text placeholder:text-aether-muted/50"
-              placeholder="http://localhost:3000"
+              className="flex-1 bg-transparent outline-none text-xs text-aether-textOnAccent placeholder:text-aether-textOnAccent/40 h-full font-medium"
+              placeholder="localhost:3000"
             />
-            <button onClick={() => setIframeKey(k => k + 1)} className="text-aether-muted hover:text-aether-accent transition-colors"><RefreshCw size={10} /></button>
+            <div className="w-px h-3 bg-black/10"></div>
+            <button onClick={toggleInspector} className={`p-0.5 rounded ${isInspectorActive ? 'bg-white text-aether-accent shadow-sm' : 'text-aether-textOnAccent opacity-60 hover:opacity-100'}`}>
+              <Crosshair size={12} />
+            </button>
+            <button onClick={() => setIframeKey(k => k + 1)} className="text-aether-textOnAccent opacity-60 hover:opacity-100">
+              <RefreshCw size={12} />
+            </button>
           </div>
-
-          {/* INSPECTOR TOGGLE */}
-          <button
-            onClick={toggleInspector}
-            className={`p-1 rounded transition-all no-drag ${isInspectorActive ? 'bg-aether-accent text-white shadow-glow' : 'text-aether-muted hover:text-aether-text'}`}
-            title="Inspect Element"
-          >
-            <Crosshair size={14} />
-          </button>
         </div>
+
+        {/* Right: Controls */}
         <WindowControls />
       </div>
 
-      {/* SIDEBAR */}
-      <div className="w-16 flex-shrink-0 flex flex-col items-center py-12 border-r border-aether-border bg-aether-sidebar z-20 pt-16">
-        <nav className="flex flex-col gap-6 w-full items-center">
-          {/* FIXED BUTTON WRAPPERS */}
-          <button onClick={handleOpenFolder} className="p-2 rounded-xl text-aether-text hover:bg-white hover:text-aether-accent hover:shadow-soft transition-all no-drag group" title="Open Project">
-            <FolderGit2 size={20} className="group-active:scale-95 transition-transform" />
-          </button>
-          <button className="p-2 rounded-xl text-aether-muted hover:bg-white hover:text-aether-text hover:shadow-soft transition-all no-drag">
-            <Search size={20} />
-          </button>
-        </nav>
-        <div className="flex-1" />
-        <Settings size={20} className="mb-6 text-aether-muted cursor-pointer hover:text-aether-text transition-colors no-drag" />
-      </div>
+      {/* --- 2. MAIN WORKSPACE --- */}
+      <div className="flex-1 flex overflow-hidden">
 
-      {/* EXPLORER */}
-      <div className="w-56 flex-shrink-0 border-r border-aether-border bg-aether-bg py-6 px-4 hidden md:flex flex-col pt-16">
-        <h2 className="text-[10px] font-bold tracking-widest text-aether-muted uppercase mb-4 truncate">
-          {projectPath ? projectPath.split(/[\\/]/).pop() : 'NO FOLDER'}
-        </h2>
-        <div className="text-sm space-y-0.5 overflow-y-auto flex-1 pr-2 scrollbar-hide">
-          {!projectPath && (
-            <div className="flex flex-col items-center justify-center h-32 text-aether-muted text-xs text-center opacity-60">
-              <FolderGit2 size={24} className="mb-2 opacity-20" />
-              <p>Open a project<br />to start</p>
-            </div>
-          )}
-          {files.map((file, i) => (
-            <div key={i} onClick={() => handleFileClick(file)} className={`
-                flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all truncate group
-                ${activeFile === file.path ? 'bg-white shadow-sm font-medium text-aether-text' : 'text-aether-muted hover:bg-aether-surface/50 hover:text-aether-text'}
-              `}>
-              <span className={`w-1.5 h-1.5 rounded-full transition-colors ${file.isDirectory ? 'bg-aether-accent group-hover:scale-125' : 'bg-aether-border group-hover:bg-aether-muted'}`}></span>
-              <span className="truncate text-xs">{file.name}</span>
-            </div>
-          ))}
+        {/* A. GOLDEN LEFT BAR (Icons) */}
+        <div className="w-12 bg-aether-accent flex flex-col items-center py-4 gap-4 shrink-0 z-20">
+          <button onClick={handleOpenFolder} className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent" title="Files"><Files size={18} strokeWidth={2} /></button>
+          <button className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent" title="Search"><Search size={18} strokeWidth={2} /></button>
+          <button className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent" title="Git"><GitGraph size={18} strokeWidth={2} /></button>
+          <div className="flex-1"></div>
+          <button className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent" title="Settings"><Settings size={18} strokeWidth={2} /></button>
         </div>
-      </div>
 
-      {/* SPLIT CONTENT */}
-      <div className="flex-1 flex min-w-0 pt-10 relative">
-        {/* EDITOR */}
-        <div className={`flex-col relative transition-all duration-300 ease-in-out border-r border-aether-border ${viewMode === 'preview' ? 'hidden' : 'flex'} ${viewMode === 'split' ? 'w-1/2' : 'w-full'}`}>
-          <div className="flex-1 relative overflow-hidden">
-            <AetherEditor code={code} setCode={setCode} revealLine={revealLine} />
+        {/* B. SIDEBAR (Explorer) */}
+        <div className="w-60 bg-aether-sidebar border-r border-aether-border flex flex-col shrink-0">
+          <div className="h-8 flex items-center px-4 text-[10px] font-bold tracking-wider text-aether-muted uppercase">
+            {projectPath ? projectPath.split(/[\\/]/).pop() : 'NO FOLDER'}
           </div>
-          {/* AI Input */}
-          <div className="flex-shrink-0 p-4 border-t border-aether-border bg-aether-sidebar z-20">
-            <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all duration-300 ${isThinking ? 'bg-white border-aether-accent shadow-glow' : 'bg-aether-bg border-aether-border shadow-sm'}`}>
+          <div className="flex-1 overflow-y-auto px-2 text-sm">
+            {files.length === 0 && <div className="p-4 text-center text-xs opacity-40 italic">Open a project folder</div>}
+            {files.map((file, i) => (
+              <div key={i} onClick={() => handleFileClick(file)} className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded-md transition-colors ${activeFile === file.path ? 'bg-white shadow-sm text-aether-text font-medium' : 'text-aether-text hover:bg-black/5'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${file.isDirectory ? 'bg-aether-accent' : 'bg-aether-border'}`}></span>
+                <span className="truncate text-xs">{file.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* C. EDITOR & PREVIEW */}
+        <div className="flex-1 flex flex-col min-w-0 bg-aether-bg relative">
+          <div className="flex-1 flex overflow-hidden">
+            {/* Editor Pane */}
+            <div className={`${viewMode === 'preview' ? 'hidden' : 'flex'} flex-1 flex-col relative border-r border-aether-border`}>
+              <AetherEditor code={code} setCode={setCode} revealLine={revealLine} />
+            </div>
+
+            {/* Preview Pane */}
+            <div className={`${viewMode === 'code' ? 'hidden' : 'flex'} flex-1 bg-white relative`}>
+              <iframe key={iframeKey} src={previewUrl} onLoad={handleIframeLoad} className="w-full h-full border-none" title="Preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" />
+            </div>
+          </div>
+        </div>
+
+        {/* D. RIGHT PANEL (AGENT MANAGER) */}
+        <div className="w-80 bg-aether-sidebar border-l border-aether-border flex flex-col shrink-0">
+          {/* Header */}
+          <div className="h-9 flex items-center justify-between px-4 border-b border-aether-border bg-aether-sidebar">
+            <span className="text-xs font-bold text-aether-text tracking-wide">AGENT MANAGER</span>
+            <div className="flex gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500"></div>
+            </div>
+          </div>
+
+          {/* Chat Area */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-4">
+            <div className="bg-white p-3 rounded-lg border border-aether-border text-sm shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-4 h-4 rounded bg-aether-accent flex items-center justify-center text-[10px] font-bold text-aether-textOnAccent">S</div>
+                <span className="text-xs font-bold text-aether-text">Synapse</span>
+              </div>
+              <p className="text-aether-text leading-relaxed">Hello! I'm ready to help you build. Describe what you want to change in the code.</p>
+            </div>
+
+            {isThinking && (
+              <div className="bg-white p-3 rounded-lg border border-aether-border text-sm shadow-sm opacity-80">
+                <div className="flex items-center gap-2">
+                  <Zap size={14} className="text-aether-accent animate-pulse" />
+                  <span className="text-xs font-medium text-aether-muted">Thinking...</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 border-t border-aether-border bg-white/50">
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${isThinking ? 'bg-white border-aether-accent shadow-md' : 'bg-white border-aether-border shadow-sm focus-within:border-aether-accent focus-within:shadow-md'}`}>
               {isThinking ? <Zap size={16} className="text-aether-accent animate-pulse" /> : <Sparkles size={16} className="text-aether-muted" />}
-              <input disabled={isThinking} onKeyDown={handleAskAI} placeholder="Ask Synapse..." className="flex-1 bg-transparent outline-none text-sm text-aether-text placeholder:text-aether-muted font-medium border-none ring-0 focus:ring-0" />
+              <input
+                disabled={isThinking}
+                onKeyDown={handleAskAI}
+                placeholder="Ask Synapse..."
+                className="flex-1 bg-transparent outline-none text-sm font-medium text-aether-text placeholder:text-aether-muted"
+              />
+            </div>
+            <div className="mt-2 text-[10px] text-center text-aether-muted">
+              Press Enter to generate code
             </div>
           </div>
         </div>
 
-        {/* PREVIEW */}
-        <div className={`flex-col bg-white relative transition-all duration-300 ease-in-out ${viewMode === 'code' ? 'hidden' : 'flex'} ${viewMode === 'split' ? 'w-1/2' : 'w-full'}`}>
-          <iframe
-            key={iframeKey}
-            src={previewUrl}
-            className="w-full h-full border-none bg-white"
-            title="Live Preview"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-            onLoad={handleIframeLoad}
-          />
+      </div>
+
+      {/* --- 3. GOLDEN BOTTOM BAR --- */}
+      <div className="h-6 bg-aether-accent flex items-center justify-between px-3 text-xxs font-bold text-aether-textOnAccent select-none cursor-default z-50">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 hover:bg-black/5 px-1 rounded"><GitGraph size={10} /> main*</div>
+          <div className="flex items-center gap-1 hover:bg-black/5 px-1 rounded"><AlertCircle size={10} /> 0 Errors</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 hover:bg-black/5 px-1 rounded"><LayoutTemplate size={10} /> Split</div>
+          <div className="hover:bg-black/5 px-1 rounded">Ln {revealLine || 1}, Col 1</div>
+          <div className="hover:bg-black/5 px-1 rounded">UTF-8</div>
+          <div className="flex items-center gap-1 hover:bg-black/5 px-1 rounded"><Check size={10} /> Prettier</div>
         </div>
       </div>
+
     </div>
   );
 }

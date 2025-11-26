@@ -8,23 +8,32 @@ module.exports = {
         extend: {
             colors: {
                 aether: {
-                    bg: '#fbf7ef',         // Cream Background
-                    sidebar: '#f7f2e8',    // Slightly darker cream
-                    surface: '#ede6d4',    // Panel/Button surface
-                    text: '#2b2926',       // Soft Charcoal
-                    muted: '#8c877d',      // Muted text
-                    accent: '#a39060',     // Olive/Gold Accent
-                    border: '#e6dfd0',     // Subtle borders
-                    selection: '#e3dcc8',  // Editor selection
+                    bg: '#FFFDF5',          // Warmer Cream (Paper-like)
+                    sidebar: '#F4F0E6',     // Soft Beige (Distinct from main BG)
+
+                    // HARMONIOUS AMBER (Rich Honey/Golden-Ochre)
+                    // Less neon, more "Warm Minimal"
+                    accent: '#D99A25',
+                    accentHover: '#B47F1E',
+
+                    textOnAccent: '#3E2C12', // Deep Brown (High contrast on Amber)
+
+                    text: '#2D261F',        // Warm Charcoal
+                    muted: '#8C857B',       // Warm Grey
+                    border: '#E6E0D1',      // Soft Stone
+                    selection: '#FCEEB5',   // Pale Amber
                 }
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-                mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                sans: ['Inter', 'sans-serif'],
+                mono: ['JetBrains Mono', 'monospace'],
+            },
+            fontSize: {
+                'xxs': '0.65rem',
             },
             boxShadow: {
-                'soft': '0 4px 20px -2px rgba(163, 144, 96, 0.1)',
-                'glow': '0 0 15px rgba(163, 144, 96, 0.3)',
+                'glass': '0 4px 30px rgba(0, 0, 0, 0.05)',
+                'soft': '0 2px 10px rgba(217, 154, 37, 0.15)',
             }
         },
     },
