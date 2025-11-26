@@ -1,16 +1,17 @@
 import { ipcRenderer, contextBridge } from 'electron';
 
-// --- API DEFINITION ---
-contextBridge.exposeInMainWorld('synapse', {
-    // 1. Open Folder Dialog
+console.log('[Preload] Initializing Synapse Bridge...');
+
+const api = {
     openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
-
-    // 2. Read Directory Structure (Recursive)
     readDirectory: (path: string) => ipcRenderer.invoke('fs:readDirectory', path),
-
-    // 3. Read File Content
     readFile: (path: string) => ipcRenderer.invoke('fs:readFile', path),
-
-    // 4. Save File Content
     writeFile: (path: string, content: string) => ipcRenderer.invoke('fs:writeFile', path, content),
-});
+};
+
+try {
+    contextBridge.exposeInMainWorld('synapse', api);
+} catch (error) {
+    console.warn('[Preload] Failed to use contextBridge, falling back to window assignment:', error);
+    (window as any).synapse = api;
+}

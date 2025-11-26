@@ -92,16 +92,23 @@ export default function AetherApp() {
 
   // --- ACTIONS ---
   const handleOpenFolder = async () => {
-    console.log("Opening folder dialog..."); // Debug log
+    console.log("[UI] Requesting open folder...");
     try {
+      // Verify API availability
+      if (!window.synapse) {
+        throw new Error("Synapse API not found on window object. Is preload script working?");
+      }
+
       const path = await window.synapse.openDirectory();
+      console.log("[UI] Received path:", path);
+
       if (path) {
         setProjectPath(path);
-        loadFiles(path);
+        await loadFiles(path);
       }
-    } catch (error) {
-      console.error("Failed to open directory:", error);
-      alert("Error opening folder. Check console.");
+    } catch (error: any) {
+      console.error("[UI] Open Folder Error:", error);
+      alert(`Error opening folder: ${error.message || error}`);
     }
   };
 

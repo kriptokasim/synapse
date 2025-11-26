@@ -7,6 +7,8 @@ process.env.VITE_PUBLIC = electron.app.isPackaged ? process.env.DIST : path.join
 let win;
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 function createWindow() {
+  const preloadPath = path.join(__dirname, "preload.js");
+  console.error("[Main] Preload path:", preloadPath);
   win = new electron.BrowserWindow({
     width: 1200,
     height: 800,
@@ -22,7 +24,7 @@ function createWindow() {
     titleBarStyle: "hidden",
     // MacOS style
     webPreferences: {
-      preload: path.join(__dirname, "preload.ts"),
+      preload: preloadPath,
       nodeIntegration: true,
       contextIsolation: false
       // Prototype mode
@@ -41,14 +43,28 @@ function createWindow() {
   electron.ipcMain.on("window:close", () => win?.close());
 }
 electron.ipcMain.handle("dialog:openDirectory", async () => {
-  const { canceled, filePaths } = await electron.dialog.showOpenDialog({
-    properties: ["openDirectory"]
-  });
-  if (canceled) return null;
-  return filePaths[0];
+  console.log("[Main] Opening directory dialog...");
+  try {
+    const { canceled, filePaths } = await electron.dialog.showOpenDialog({
+      properties: ["openDirectory"],
+      title: "Select Project Folder",
+      buttonLabel: "Open Project"
+    });
+    if (canceled) {
+      console.log("[Main] Dialog canceled");
+      return null;
+    }
+    console.log("[Main] Selected path:", filePaths[0]);
+    return filePaths[0];
+  } catch (error) {
+    console.error("[Main] Dialog Error:", error);
+    throw error;
+  }
 });
 electron.ipcMain.handle("fs:readDirectory", async (_, dirPath) => {
+  console.log("[Main] Reading directory:", dirPath);
   try {
+    await fs.access(dirPath);
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const files = entries.map((entry) => ({
       name: entry.name,
@@ -56,15 +72,17 @@ electron.ipcMain.handle("fs:readDirectory", async (_, dirPath) => {
       path: path.join(dirPath, entry.name)
     }));
     return files.sort((a, b) => a.isDirectory === b.isDirectory ? 0 : a.isDirectory ? -1 : 1);
-  } catch (e) {
-    console.error(e);
-    return [];
+  } catch (error) {
+    console.error("[Main] ReadDir Error:", error);
+    throw error;
   }
 });
 electron.ipcMain.handle("fs:readFile", async (_, filePath) => {
+  console.log("[Main] Reading file:", filePath);
   return await fs.readFile(filePath, "utf-8");
 });
 electron.ipcMain.handle("fs:writeFile", async (_, filePath, content) => {
+  console.log("[Main] Writing file:", filePath);
   await fs.writeFile(filePath, content, "utf-8");
   return true;
 });
