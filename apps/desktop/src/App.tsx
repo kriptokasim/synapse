@@ -3,7 +3,7 @@ import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import {
   Settings, FolderGit2, Search, Zap,
-  Minus, Square, X, Sparkles, LayoutTemplate, Code, Eye, RefreshCw, Globe, Folder, File
+  Minus, Square, X, Sparkles, LayoutTemplate, Code, Eye, RefreshCw, Globe
 } from 'lucide-react';
 import { SynapseFactory } from './ai/UniversalGateway';
 
@@ -19,7 +19,6 @@ const THEME = {
 };
 
 // --- COMPONENTS ---
-
 const WindowControls = () => (
   <div className="flex items-center gap-2 px-4 no-drag">
     <button onClick={() => ipcRenderer.send('window:minimize')} className="p-1.5 hover:bg-aether-surface rounded text-aether-muted hover:text-aether-text transition-colors"><Minus size={14} /></button>
@@ -87,17 +86,22 @@ export default function AetherApp() {
   const [code, setCode] = useState('// Open a folder to start coding...');
   const [isThinking, setIsThinking] = useState(false);
 
-  // View State: 'code' | 'preview' | 'split'
   const [viewMode, setViewMode] = useState<'code' | 'preview' | 'split'>('split');
   const [previewUrl, setPreviewUrl] = useState('http://localhost:3000');
-  const [iframeKey, setIframeKey] = useState(0); // For forcing refresh
+  const [iframeKey, setIframeKey] = useState(0);
 
-  // --- FILE SYSTEM ACTIONS ---
+  // --- ACTIONS ---
   const handleOpenFolder = async () => {
-    const path = await window.synapse.openDirectory();
-    if (path) {
-      setProjectPath(path);
-      loadFiles(path);
+    console.log("Opening folder dialog..."); // Debug log
+    try {
+      const path = await window.synapse.openDirectory();
+      if (path) {
+        setProjectPath(path);
+        loadFiles(path);
+      }
+    } catch (error) {
+      console.error("Failed to open directory:", error);
+      alert("Error opening folder. Check console.");
     }
   };
 
@@ -107,16 +111,12 @@ export default function AetherApp() {
   };
 
   const handleFileClick = async (file: any) => {
-    if (file.isDirectory) {
-      console.log("Opening folder:", file.path);
-    } else {
-      const content = await window.synapse.readFile(file.path);
-      setActiveFile(file.path);
-      setCode(content);
-    }
+    if (file.isDirectory) return;
+    const content = await window.synapse.readFile(file.path);
+    setActiveFile(file.path);
+    setCode(content);
   };
 
-  // --- AI LOGIC ---
   const handleAskAI = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !isThinking) {
       const prompt = (e.target as HTMLInputElement).value;
@@ -124,9 +124,7 @@ export default function AetherApp() {
       setIsThinking(true);
       try {
         const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
-        if (!apiKey || apiKey.includes("SENIN_GERCEK")) {
-          alert("API Key Missing in .env"); setIsThinking(false); return;
-        }
+        if (!apiKey) { alert("API Key Missing"); setIsThinking(false); return; }
         const ai = SynapseFactory.create('gemini', apiKey);
         const newCode = await ai.generateCode(prompt, code);
         setCode(newCode);
@@ -136,34 +134,30 @@ export default function AetherApp() {
   };
 
   return (
-    <div className="relative flex h-screen w-screen bg-aether-bg text-aether-text font-sans overflow-hidden border border-aether-border rounded-lg shadow-2xl">
+    <div className="flex h-screen w-screen bg-aether-bg text-aether-text font-sans overflow-hidden border border-aether-border rounded-lg shadow-2xl">
 
       {/* HEADER */}
-      <div className="absolute top-0 left-0 w-full h-10 z-50 flex justify-between items-center drag-region" style={{ WebkitAppRegion: 'drag' } as any}>
-        <div className="flex items-center">
-          {/* Logo aligned with sidebar */}
-          <div className="w-16 flex justify-center items-center">
-            <span className="text-[10px] font-bold tracking-widest text-aether-accent opacity-50">AETHER</span>
+      <div className="absolute top-0 left-0 w-full h-10 z-50 flex justify-between items-center drag-region">
+        <div className="px-4 flex items-center gap-4">
+          <span className="text-xs font-bold tracking-widest text-aether-accent opacity-50">AETHER</span>
+
+          {/* View Toggle */}
+          <div className="flex bg-aether-surface rounded-lg p-0.5 no-drag">
+            <button onClick={() => setViewMode('code')} className={`p-1 rounded transition-all ${viewMode === 'code' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted hover:text-aether-text'}`} title="Code Only"><Code size={12} /></button>
+            <button onClick={() => setViewMode('split')} className={`p-1 rounded transition-all ${viewMode === 'split' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted hover:text-aether-text'}`} title="Split View"><LayoutTemplate size={12} /></button>
+            <button onClick={() => setViewMode('preview')} className={`p-1 rounded transition-all ${viewMode === 'preview' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted hover:text-aether-text'}`} title="Preview Only"><Eye size={12} /></button>
           </div>
 
-          <div className="flex items-center gap-4 pl-2">
-            {/* View Mode Toggle */}
-            <div className="flex bg-aether-surface rounded-lg p-0.5 no-drag">
-              <button onClick={() => setViewMode('code')} className={`p-1 rounded ${viewMode === 'code' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><Code size={12} /></button>
-              <button onClick={() => setViewMode('split')} className={`p-1 rounded ${viewMode === 'split' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><LayoutTemplate size={12} /></button>
-              <button onClick={() => setViewMode('preview')} className={`p-1 rounded ${viewMode === 'preview' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><Eye size={12} /></button>
-            </div>
-
-            {/* URL Bar */}
-            <div className="flex items-center gap-2 bg-aether-surface px-2 py-0.5 rounded-md no-drag w-64">
-              <Globe size={10} className="text-aether-muted" />
-              <input
-                value={previewUrl}
-                onChange={(e) => setPreviewUrl(e.target.value)}
-                className="bg-transparent outline-none text-[10px] w-full font-mono text-aether-text"
-              />
-              <button onClick={() => setIframeKey(k => k + 1)}><RefreshCw size={10} className="text-aether-muted hover:text-aether-accent" /></button>
-            </div>
+          {/* CLEAN URL BAR */}
+          <div className="flex items-center gap-2 bg-aether-surface px-2 py-1 rounded-md no-drag w-64 group focus-within:ring-1 focus-within:ring-aether-accent/50 transition-all">
+            <Globe size={10} className="text-aether-muted group-focus-within:text-aether-accent" />
+            <input
+              value={previewUrl}
+              onChange={(e) => setPreviewUrl(e.target.value)}
+              className="bg-transparent border-none outline-none text-[10px] w-full font-mono text-aether-text focus:ring-0 placeholder:text-aether-muted/50"
+              placeholder="Enter localhost URL..."
+            />
+            <button onClick={() => setIframeKey(k => k + 1)} className="text-aether-muted hover:text-aether-accent transition-colors"><RefreshCw size={10} /></button>
           </div>
         </div>
         <WindowControls />
@@ -172,36 +166,46 @@ export default function AetherApp() {
       {/* SIDEBAR */}
       <div className="w-16 flex-shrink-0 flex flex-col items-center py-12 border-r border-aether-border bg-aether-sidebar z-20 pt-16">
         <nav className="flex flex-col gap-6 w-full items-center">
-          <FolderGit2 size={20} onClick={handleOpenFolder} className="text-aether-text cursor-pointer hover:text-aether-accent transition-colors" />
-          <Search size={20} className="text-aether-muted hover:text-aether-text cursor-pointer transition-colors" />
+          {/* FOLDER BUTTON - Explicitly bound */}
+          <button onClick={handleOpenFolder} className="p-2 rounded-xl text-aether-text hover:bg-aether-surface hover:text-aether-accent transition-colors no-drag" title="Open Project">
+            <FolderGit2 size={20} />
+          </button>
+          <button className="p-2 rounded-xl text-aether-muted hover:bg-aether-surface hover:text-aether-text transition-colors no-drag">
+            <Search size={20} />
+          </button>
         </nav>
         <div className="flex-1" />
-        <Settings size={20} className="mb-6 text-aether-muted cursor-pointer hover:text-aether-text transition-colors" />
+        <Settings size={20} className="mb-6 text-aether-muted cursor-pointer hover:text-aether-text transition-colors no-drag" />
       </div>
 
       {/* EXPLORER */}
       <div className="w-56 flex-shrink-0 border-r border-aether-border bg-aether-bg py-6 px-4 hidden md:flex flex-col pt-16">
-        <h2 className="text-[10px] font-bold tracking-widest text-aether-muted uppercase mb-4">
+        <h2 className="text-[10px] font-bold tracking-widest text-aether-muted uppercase mb-4 truncate">
           {projectPath ? projectPath.split(/[\\/]/).pop() : 'NO FOLDER'}
         </h2>
-        <div className="text-sm space-y-0.5 overflow-y-auto flex-1">
-          {files.length === 0 && <span className="text-xs text-aether-muted italic">Empty or no folder open</span>}
+        <div className="text-sm space-y-0.5 overflow-y-auto flex-1 pr-2 scrollbar-hide">
+          {!projectPath && (
+            <div className="flex flex-col items-center justify-center h-32 text-aether-muted text-xs text-center">
+              <FolderGit2 size={24} className="mb-2 opacity-20" />
+              <p>Open a project<br />to start</p>
+            </div>
+          )}
           {files.map((file, i) => (
             <div key={i} onClick={() => handleFileClick(file)} className={`
-                flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-all truncate
-                ${activeFile === file.path ? 'bg-aether-surface font-medium text-aether-text' : 'text-aether-muted hover:bg-aether-surface/50'}
+                flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all truncate group
+                ${activeFile === file.path ? 'bg-aether-surface font-medium text-aether-text shadow-sm' : 'text-aether-muted hover:bg-aether-surface/50 hover:text-aether-text'}
               `}>
-              {file.isDirectory ? <Folder size={14} /> : <File size={14} />}
-              <span className="truncate">{file.name}</span>
+              <span className={`w-1.5 h-1.5 rounded-full transition-colors ${file.isDirectory ? 'bg-aether-accent group-hover:scale-125' : 'bg-aether-border group-hover:bg-aether-muted'}`}></span>
+              <span className="truncate text-xs">{file.name}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* MAIN SPLIT CONTENT */}
+      {/* SPLIT CONTENT */}
       <div className="flex-1 flex min-w-0 pt-10 relative">
 
-        {/* LEFT: EDITOR */}
+        {/* EDITOR PANE */}
         <div className={`
             flex-col relative transition-all duration-300 ease-in-out border-r border-aether-border
             ${viewMode === 'preview' ? 'hidden' : 'flex'}
@@ -210,16 +214,15 @@ export default function AetherApp() {
           <div className="flex-1 relative overflow-hidden">
             <AetherEditor code={code} setCode={setCode} />
           </div>
-          {/* AI Input */}
           <div className="flex-shrink-0 p-4 border-t border-aether-border bg-aether-sidebar z-20">
             <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all duration-300 ${isThinking ? 'bg-white border-aether-accent shadow-glow' : 'bg-aether-bg border-aether-border shadow-sm'}`}>
               {isThinking ? <Zap size={16} className="text-aether-accent animate-pulse" /> : <Sparkles size={16} className="text-aether-muted" />}
-              <input disabled={isThinking} onKeyDown={handleAskAI} placeholder="Ask Synapse..." className="flex-1 bg-transparent outline-none text-sm text-aether-text placeholder:text-aether-muted font-medium" />
+              <input disabled={isThinking} onKeyDown={handleAskAI} placeholder="Ask Synapse..." className="flex-1 bg-transparent outline-none text-sm text-aether-text placeholder:text-aether-muted font-medium border-none focus:ring-0" />
             </div>
           </div>
         </div>
 
-        {/* RIGHT: PREVIEW */}
+        {/* PREVIEW PANE */}
         <div className={`
             flex-col bg-white relative transition-all duration-300 ease-in-out
             ${viewMode === 'code' ? 'hidden' : 'flex'}
@@ -228,19 +231,11 @@ export default function AetherApp() {
           <iframe
             key={iframeKey}
             src={previewUrl}
-            className="w-full h-full border-none"
+            className="w-full h-full border-none bg-white"
             title="Live Preview"
-            sandbox="allow-scripts allow-same-origin allow-forms"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
           />
-          {/* Overlay when iframe is likely empty/error */}
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-aether-bg -z-10">
-            <div className="text-center opacity-50">
-              <Globe size={32} className="mx-auto mb-2 text-aether-muted" />
-              <p className="text-xs">Enter a local URL above</p>
-            </div>
-          </div>
         </div>
-
       </div>
     </div>
   );
