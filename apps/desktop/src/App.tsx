@@ -2,27 +2,43 @@ import React, { useState, useEffect, useRef } from 'react';
 import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import {
-  Files, Search, GitGraph, Settings, // Sidebar Icons
-  Minus, Square, X,                  // Window Controls
-  RefreshCw, Globe, Crosshair,       // URL Bar
-  Check, AlertCircle,
-  Zap, Paperclip, Brain, Rocket, ArrowUp // Status Bar & AI Icons
+  Files, Search, Settings, Minus, Square, X,
+  RefreshCw, Globe, Crosshair,
+  Zap, Paperclip, Brain, Rocket, ArrowUp, Bot
+
 } from 'lucide-react';
 import { SynapseFactory } from './ai/UniversalGateway';
 import type { AIModelMode } from './ai/UniversalGateway';
 import { INSPECTOR_SCRIPT } from './ai/inspector';
 
-const { ipcRenderer } = window.require('electron');
+// Electron Interop (Safe requiring)
+const electron = window.require ? window.require('electron') : null;
+const ipcRenderer = electron ? electron.ipcRenderer : null;
 
 loader.config({ monaco });
+
+// Types
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  content: string;
+  image?: string;
+}
+
+interface SelectedContext {
+  tag: string;
+  selector: string; // Full path: div#app > button.btn
+  lineNumber: number;
+  snippet: string;
+}
 
 // --- COMPONENTS ---
 
 const WindowControls = () => (
   <div className="flex items-center h-full px-1 no-drag">
-    <button onClick={() => ipcRenderer.send('window:minimize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Minus size={14} /></button>
-    <button onClick={() => ipcRenderer.send('window:maximize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Square size={12} /></button>
-    <button onClick={() => ipcRenderer.send('window:close')} className="p-2 hover:bg-red-500 hover:text-white rounded-none transition-colors text-aether-textOnAccent"><X size={14} /></button>
+    <button onClick={() => ipcRenderer?.send('window:minimize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Minus size={14} /></button>
+    <button onClick={() => ipcRenderer?.send('window:maximize')} className="p-2 hover:bg-black/10 rounded-none transition-colors text-aether-textOnAccent"><Square size={12} /></button>
+    <button onClick={() => ipcRenderer?.send('window:close')} className="p-2 hover:bg-red-500 hover:text-white rounded-none transition-colors text-aether-textOnAccent"><X size={14} /></button>
   </div>
 );
 
@@ -96,64 +112,101 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
 
 // --- MAIN APP ---
 export default function AetherApp() {
+  // Project State
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
   const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [code, setCode] = useState('// Synapse AntiGravity v2\n// Ready for multimodal input...');
+  const [code, setCode] = useState('// Synapse AntiGravity v2\n// Open a project to start...');
+
+  // UI State
   const [isThinking, setIsThinking] = useState(false);
   const [viewMode, setViewMode] = useState<'code' | 'preview' | 'split'>('split');
   const [previewUrl, setPreviewUrl] = useState('about:blank');
   const [iframeKey, setIframeKey] = useState(0);
   const [isInspectorActive, setIsInspectorActive] = useState(false);
   const [revealLine, setRevealLine] = useState<number | null>(null);
-  const [selectedContext, setSelectedContext] = useState<any>(null);
 
-  // ✨ NEW: AI State
+  // AI & Chat State (Fixed: Now persistent)
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: 'init', role: 'model', content: 'Ready. Select an element or type a command.' }
+  ]);
   const [aiMode, setAiMode] = useState<AIModelMode>('standard');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedContext, setSelectedContext] = useState<SelectedContext | null>(null);
 
-  // Handlers
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // File Handlers
   const handleOpenFolder = async () => {
     try {
+      // @ts-ignore
       const path = await window.synapse.openDirectory();
       if (path) { setProjectPath(path); loadFiles(path); }
     } catch (e) { console.error(e); }
   };
 
   const loadFiles = async (path: string) => {
+    // @ts-ignore
     const fileList = await window.synapse.readDirectory(path);
     setFiles(fileList);
   };
 
   const handleFileClick = async (file: any) => {
     if (file.isDirectory) return;
+    // @ts-ignore
     const content = await window.synapse.readFile(file.path);
     setActiveFile(file.path);
     setCode(content);
   };
 
-  // Locator & Inspector Logic
+  // Inspector Handler (Improved Locator)
   useEffect(() => {
     const handler = async (event: MessageEvent) => {
       if (event.data.type === 'ELEMENT_CLICKED') {
-        const { tag, id, className, text, snippet } = event.data.payload;
+        const { tag, id, text, selector, snippet } = event.data.payload;
+        console.log("Inspector Picked:", selector);
+
         setIsInspectorActive(false);
         document.querySelector('iframe')?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: false }, '*');
 
-        // Simple locator fallback
+        // Basic Line Finding Logic
         const lines = code.split('\n');
         let foundLine = null;
-        for (let i = 0; i < lines.length; i++) {
-          if (id && lines[i].includes(`id="${id}"`)) { foundLine = i + 1; break; }
-          if (text && text.length > 5 && lines[i].includes(text)) { foundLine = i + 1; break; }
+
+        // 1. Try finding ID match
+        if (id) {
+          const idIdx = lines.findIndex(l => l.includes(`id="${id}"`) || l.includes(`id='${id}'`));
+          if (idIdx !== -1) foundLine = idIdx + 1;
+        }
+
+        // 2. Try finding unique text match
+        if (!foundLine && text && text.length > 5) {
+          const textIdx = lines.findIndex(l => l.includes(text));
+          if (textIdx !== -1) foundLine = textIdx + 1;
+        }
+
+        // 3. Fallback to tag search (imprecise but better than nothing)
+        if (!foundLine) {
+          const tagIdx = lines.findIndex(l => l.includes(`<${tag}`));
+          if (tagIdx !== -1) foundLine = tagIdx + 1;
         }
 
         if (foundLine) {
           if (viewMode === 'preview') setViewMode('split');
           setRevealLine(foundLine);
-          setSelectedContext({ tag, text, id, className, lineNumber: foundLine, snippet });
+          setSelectedContext({ tag, selector, lineNumber: foundLine, snippet });
+        } else {
+          // Even if line not found, set context so AI knows what to look for
+          setSelectedContext({ tag, selector, lineNumber: 0, snippet });
         }
       }
     };
@@ -191,36 +244,54 @@ export default function AetherApp() {
     if (!chatInput.trim() && !attachedImage) return;
     if (isThinking) return;
 
+    const newUserMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: chatInput,
+      image: attachedImage || undefined
+    };
+
+    setMessages(prev => [...prev, newUserMsg]);
+    setChatInput('');
+    setAttachedImage(null);
     setIsThinking(true);
 
     try {
       const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
-      if (!apiKey) { alert("API Key Missing"); setIsThinking(false); return; }
+      if (!apiKey) throw new Error("API Key Missing");
 
       const ai = SynapseFactory.create('gemini', apiKey);
 
       let prompt = `
-            I need to modify the current file based on a request.
             FILENAME: ${activeFile || 'untitled'}
-            USER REQUEST: "${chatInput}"
+            USER REQUEST: "${newUserMsg.content}"
         `;
 
       if (selectedContext) {
-        prompt += `\nFOCUS ON ELEMENT: <${selectedContext.tag}> at line ${selectedContext.lineNumber}`;
+        prompt += `\n\nFOCUS CONTEXT:
+            - Selector: ${selectedContext.selector}
+            - Line Approx: ${selectedContext.lineNumber}
+            - Code Snippet: ${selectedContext.snippet}
+            
+            Please locate this specific element in the file structure and apply changes there.
+            `;
       }
 
-      console.log("Sending to AI...", aiMode);
+      // Add placeholder bot message
+      const botMsgId = (Date.now() + 1).toString();
+      setMessages(prev => [...prev, { id: botMsgId, role: 'model', content: 'Thinking...' }]);
 
-      // ✨ NEW: Pass image and mode to AI
-      let newCode = await ai.generateCode(prompt, code, {
+      // Call AI
+      const newCode = await ai.generateCode(prompt, code, {
         mode: aiMode,
-        image: attachedImage || undefined
+        image: newUserMsg.image
       });
 
-      newCode = newCode.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
-
+      // Update Code
       setCode(newCode);
+
       if (activeFile) {
+        // @ts-ignore
         await window.synapse.writeFile(activeFile, newCode);
         const currentUrl = new URL(previewUrl);
         currentUrl.searchParams.set('t', Date.now().toString());
@@ -228,31 +299,33 @@ export default function AetherApp() {
         setIframeKey(k => k + 1);
       }
 
-      setChatInput('');
-      setAttachedImage(null);
+      // Update Chat with Success
+      setMessages(prev => prev.map(m =>
+        m.id === botMsgId ? { ...m, content: "Code updated successfully based on your request." } : m
+      ));
+
       setSelectedContext(null);
 
     } catch (e: any) {
       console.error("AI Error:", e);
-      alert(e.message);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: `Error: ${e.message}` }]);
     } finally {
       setIsThinking(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-aether-bg font-sans overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-aether-bg font-sans overflow-hidden text-aether-text">
 
-      {/* --- 1. TOP BAR --- */}
+      {/* TOP BAR */}
       <div className="h-9 bg-aether-accent flex items-center justify-between drag-region shrink-0 shadow-sm relative z-50">
         <div className="flex items-center px-3 gap-4 text-xs font-semibold text-aether-textOnAccent">
           <div className="font-black tracking-tight mr-2 cursor-default select-none">AETHER v2</div>
-          <div className="hover:bg-black/5 px-2 py-1 rounded cursor-pointer no-drag hidden md:block">File</div>
-          <div className="hover:bg-black/5 px-2 py-1 rounded cursor-pointer no-drag hidden md:block">View</div>
+          <div className="hover:bg-black/5 px-2 py-1 rounded cursor-pointer transition-colors no-drag hidden md:block">File</div>
         </div>
 
         <div className="flex-1 max-w-2xl mx-4 no-drag h-6">
-          <div className="flex items-center w-full h-full bg-white/30 hover:bg-white/50 focus-within:bg-white rounded transition-all px-2 gap-2 border border-black/5 focus-within:border-transparent focus-within:shadow-md focus-within:text-black">
+          <div className="flex items-center w-full h-full bg-white/30 hover:bg-white/50 focus-within:bg-white rounded transition-all px-2 gap-2 border border-black/5 focus-within:text-black">
             <Globe size={12} className="text-aether-textOnAccent opacity-60" />
             <input
               value={previewUrl}
@@ -260,7 +333,6 @@ export default function AetherApp() {
               className="flex-1 bg-transparent outline-none text-xs text-aether-textOnAccent placeholder:text-aether-textOnAccent/40 h-full font-medium"
               placeholder="localhost:3000"
             />
-            <div className="w-px h-3 bg-black/10"></div>
             <button onClick={toggleInspector} className={`p-0.5 rounded ${isInspectorActive ? 'bg-white text-aether-accent shadow-sm' : 'text-aether-textOnAccent opacity-60 hover:opacity-100'}`}>
               <Crosshair size={12} />
             </button>
@@ -272,10 +344,9 @@ export default function AetherApp() {
         <WindowControls />
       </div>
 
-      {/* --- 2. MAIN WORKSPACE --- */}
+      {/* WORKSPACE */}
       <div className="flex-1 flex overflow-hidden">
-
-        {/* SIDEBARS */}
+        {/* Sidebar Icons */}
         <div className="w-12 bg-aether-accent flex flex-col items-center py-4 gap-4 shrink-0 z-20">
           <button onClick={handleOpenFolder} className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent"><Files size={18} /></button>
           <button className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent"><Search size={18} /></button>
@@ -283,13 +354,14 @@ export default function AetherApp() {
           <button className="p-2 rounded hover:bg-black/10 text-aether-textOnAccent"><Settings size={18} /></button>
         </div>
 
+        {/* File Tree */}
         <div className="w-60 bg-aether-sidebar border-r border-aether-border flex flex-col shrink-0">
           <div className="h-8 flex items-center px-4 text-[10px] font-bold tracking-wider text-aether-muted uppercase">
             {projectPath ? projectPath.split(/[\\/]/).pop() : 'NO FOLDER'}
           </div>
           <div className="flex-1 overflow-y-auto px-2 text-sm">
             {files.map((file, i) => (
-              <div key={i} onClick={() => handleFileClick(file)} className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded-md transition-colors ${activeFile === file.path ? 'bg-white shadow-sm text-aether-text font-medium' : 'text-aether-text hover:bg-black/5'}`}>
+              <div key={i} onClick={() => handleFileClick(file)} className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded-md transition-colors ${activeFile === file.path ? 'bg-white shadow-sm font-medium' : 'hover:bg-black/5'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${file.isDirectory ? 'bg-aether-accent' : 'bg-aether-border'}`}></span>
                 <span className="truncate text-xs">{file.name}</span>
               </div>
@@ -297,7 +369,7 @@ export default function AetherApp() {
           </div>
         </div>
 
-        {/* EDITOR & PREVIEW */}
+        {/* Editor/Preview */}
         <div className="flex-1 flex flex-col min-w-0 bg-aether-bg relative">
           <div className="flex-1 flex overflow-hidden">
             <div className={`${viewMode === 'preview' ? 'hidden' : 'flex'} flex-1 flex-col relative border-r border-aether-border`}>
@@ -309,11 +381,10 @@ export default function AetherApp() {
           </div>
         </div>
 
-        {/* --- D. RIGHT PANEL (UPDATED AI) --- */}
+        {/* RIGHT PANEL (CHAT) */}
         <div className="w-80 bg-aether-sidebar border-l border-aether-border flex flex-col shrink-0">
-
-          {/* 1. Model Selector */}
-          <div className="p-4 border-b border-aether-border">
+          {/* Model Selector */}
+          <div className="p-4 border-b border-aether-border bg-aether-sidebar">
             <div className="flex bg-aether-bg border border-aether-border rounded-lg p-1">
               {(['fast', 'standard', 'thinking'] as AIModelMode[]).map((m) => (
                 <button
@@ -323,7 +394,6 @@ export default function AetherApp() {
                     ? 'bg-aether-accent text-aether-textOnAccent shadow-sm'
                     : 'text-aether-muted hover:bg-black/5'
                     }`}
-                  title={m}
                 >
                   {m === 'fast' && <Rocket size={12} />}
                   {m === 'standard' && <Zap size={12} />}
@@ -334,97 +404,72 @@ export default function AetherApp() {
             </div>
           </div>
 
-          {/* 2. Chat History */}
-          <div className="flex-1 p-4 overflow-y-auto space-y-4">
-            <div className="bg-white p-3 rounded-lg border border-aether-border text-sm shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-4 h-4 rounded bg-aether-accent flex items-center justify-center text-[10px] font-bold text-aether-textOnAccent">S</div>
-                <span className="text-xs font-bold text-aether-text">Synapse</span>
+          {/* Message History */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-4 scroll-smooth" ref={chatScrollRef}>
+            {messages.map((msg) => (
+              <div key={msg.id} className={`flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                {msg.image && (
+                  <img src={msg.image} className="max-w-[120px] rounded-lg border border-aether-border" alt="upload" />
+                )}
+                <div className={`max-w-[90%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap ${msg.role === 'user'
+                  ? 'bg-aether-selection text-aether-text border border-aether-accent/20'
+                  : 'bg-white border border-aether-border shadow-sm'
+                  }`}>
+                  {msg.content}
+                </div>
               </div>
-              <p className="text-aether-text leading-relaxed">
-                Ready. Select a model above. You can attach screenshots for UI tasks.
-              </p>
-            </div>
+            ))}
 
-            {selectedContext && (
-              <div className="bg-aether-selection/30 p-2 rounded border border-aether-accent/20 text-xs flex items-center gap-2">
-                <Crosshair size={12} className="text-aether-accent" />
-                <span className="font-medium">Focus:</span>
-                <code className="bg-white/50 px-1 rounded text-aether-accent font-mono">&lt;{selectedContext.tag}&gt;</code>
-                <button onClick={() => setSelectedContext(null)} className="ml-auto hover:text-red-500"><X size={12} /></button>
+            {isThinking && (
+              <div className="flex items-center gap-2 text-aether-accent animate-pulse px-2">
+                <Bot size={14} />
+                <span className="text-xs font-medium">Processing...</span>
               </div>
             )}
           </div>
 
-          {/* 3. Advanced Input Area */}
-          <div className="p-4 border-t border-aether-border bg-white/50">
+          {/* Selected Context Indicator */}
+          {selectedContext && (
+            <div className="px-4 py-2 bg-aether-selection/50 border-t border-aether-border flex items-center gap-2 text-xs">
+              <Crosshair size={12} className="text-aether-accent" />
+              <span className="font-mono truncate flex-1" title={selectedContext.selector}>
+                {selectedContext.selector}
+              </span>
+              <button onClick={() => setSelectedContext(null)} className="hover:text-red-500"><X size={12} /></button>
+            </div>
+          )}
 
-            {/* Attachment Preview */}
+          {/* Input Area */}
+          <div className="p-4 border-t border-aether-border bg-white/50">
             {attachedImage && (
               <div className="flex items-center gap-2 mb-2 bg-white border border-aether-border px-2 py-1 rounded-md w-fit shadow-sm">
-                <div className="w-6 h-6 bg-gray-100 rounded overflow-hidden flex-shrink-0">
-                  <img src={attachedImage} className="w-full h-full object-cover" alt="preview" />
-                </div>
-                <span className="text-[10px] text-aether-text truncate max-w-[100px]">Image attached</span>
+                <img src={attachedImage} className="w-6 h-6 object-cover rounded" alt="preview" />
                 <button onClick={() => setAttachedImage(null)} className="hover:text-red-500"><X size={12} /></button>
               </div>
             )}
 
-            <div className={`flex items-end gap-2 px-3 py-2 rounded-lg border transition-all bg-white ${isThinking ? 'border-aether-accent shadow-md' : 'border-aether-border shadow-sm focus-within:border-aether-accent focus-within:shadow-md'}`}>
-
-              {/* Attach Button */}
+            <div className={`flex items-end gap-2 px-3 py-2 rounded-lg border transition-all bg-white ${isThinking ? 'border-aether-accent shadow-md' : 'border-aether-border shadow-sm'}`}>
               <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="mb-1 text-aether-muted hover:text-aether-accent transition-colors"
-                title="Attach Image"
-              >
-                <Paperclip size={16} />
-              </button>
+              <button onClick={() => fileInputRef.current?.click()} className="mb-1 text-aether-muted hover:text-aether-accent"><Paperclip size={16} /></button>
 
               <textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 disabled={isThinking}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAskAI())}
-                placeholder={isThinking ? (aiMode === 'thinking' ? "Thinking deeply..." : "Generating...") : "Ask Synapse..."}
+                placeholder="Ask Synapse..."
                 className="flex-1 bg-transparent outline-none text-sm font-medium text-aether-text placeholder:text-aether-muted resize-none py-1 max-h-32 min-h-[24px]"
                 rows={1}
                 style={{ fieldSizing: 'content' } as any}
               />
 
-              {/* Send Button */}
-              <button
-                onClick={handleAskAI}
-                disabled={isThinking || (!chatInput.trim() && !attachedImage)}
-                className={`mb-1 p-1 rounded transition-all ${isThinking
-                  ? 'text-aether-muted'
-                  : (!chatInput.trim() && !attachedImage)
-                    ? 'text-aether-border cursor-not-allowed'
-                    : 'text-aether-accent hover:bg-aether-accent/10'
-                  }`}
-              >
+              <button onClick={handleAskAI} disabled={isThinking || (!chatInput.trim() && !attachedImage)} className="mb-1 text-aether-accent hover:bg-aether-accent/10 p-1 rounded">
                 {isThinking ? <Zap size={16} className="animate-pulse" /> : <ArrowUp size={16} strokeWidth={3} />}
               </button>
             </div>
           </div>
         </div>
-
       </div>
-
-      {/* --- 3. BOTTOM BAR --- */}
-      <div className="h-6 bg-aether-accent flex items-center justify-between px-3 text-xxs font-bold text-aether-textOnAccent select-none cursor-default z-50">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 hover:bg-black/5 px-1 rounded"><GitGraph size={10} /> main*</div>
-          <div className="flex items-center gap-1 hover:bg-black/5 px-1 rounded"><AlertCircle size={10} /> 0 Errors</div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="hover:bg-black/5 px-1 rounded uppercase">{aiMode}</div>
-          <div className="hover:bg-black/5 px-1 rounded">Ln {revealLine || 1}, Col 1</div>
-          <div className="flex items-center gap-1 hover:bg-black/5 px-1 rounded"><Check size={10} /> Prettier</div>
-        </div>
-      </div>
-
     </div>
   );
 }
