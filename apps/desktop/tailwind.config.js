@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
     content: [
         "./index.html",
         "./src/**/*.{js,ts,jsx,tsx}",
@@ -19,8 +19,12 @@ export default {
                 }
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', 'sans-serif'],
+                sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
                 mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+            },
+            boxShadow: {
+                'soft': '0 4px 20px -2px rgba(163, 144, 96, 0.1)',
+                'glow': '0 0 15px rgba(163, 144, 96, 0.3)',
             }
         },
     },

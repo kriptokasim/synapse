@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
-import { Terminal, Sparkles, Layers, Play, Settings, Command, FolderGit2, Search, Zap } from 'lucide-react';
+import { Sparkles, Layers, Play, Settings, Command, FolderGit2, Search, Zap } from 'lucide-react';
 import { SynapseFactory } from './ai/UniversalGateway';
 
 // --- CONFIGURATION: Force Monaco to use local resources ---
@@ -46,24 +46,27 @@ const AetherEditor = ({ code, setCode }: { code: string, setCode: any }) => {
   }, [monacoInstance]);
 
   return (
-    <Editor
-      height="100%"
-      defaultLanguage="typescript"
-      value={code}
-      onChange={(val) => setCode(val || '')}
-      options={{
-        minimap: { enabled: false },
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: 14,
-        padding: { top: 24 },
-        lineHeight: 1.6,
-        smoothScrolling: true,
-        overviewRulerBorder: false,
-        renderLineHighlight: 'all',
-        hideCursorInOverviewRuler: true,
-        scrollBeyondLastLine: false,
-      }}
-    />
+    <div className="h-full w-full">
+      <Editor
+        height="100%"
+        defaultLanguage="typescript"
+        value={code}
+        onChange={(val) => setCode(val || '')}
+        options={{
+          minimap: { enabled: false },
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 13,
+          lineHeight: 1.6,
+          padding: { top: 16 },
+          smoothScrolling: true,
+          overviewRulerBorder: false,
+          renderLineHighlight: 'all',
+          hideCursorInOverviewRuler: true,
+          scrollBeyondLastLine: false,
+          automaticLayout: true, // Critical for resizing
+        }}
+      />
+    </div>
   );
 };
 
@@ -105,10 +108,11 @@ export default function AetherApp() {
   };
 
   return (
-    <div className="flex h-screen bg-aether-bg text-aether-text font-sans overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-16 flex flex-col items-center py-6 border-r border-aether-border bg-aether-sidebar">
-        <div className="mb-8 p-2 bg-aether-surface rounded-lg shadow-sm">
+    <div className="flex h-screen w-screen bg-aether-bg text-aether-text font-sans overflow-hidden">
+
+      {/* SIDEBAR: Fixed Width */}
+      <div className="w-16 flex-shrink-0 flex flex-col items-center py-6 border-r border-aether-border bg-aether-sidebar z-20">
+        <div className="mb-8 p-2 bg-aether-surface rounded-lg shadow-soft">
           <Command className="text-aether-accent" size={20} />
         </div>
         <nav className="flex flex-col gap-6 w-full items-center">
@@ -120,49 +124,50 @@ export default function AetherApp() {
         <Settings size={20} className="mb-4 text-aether-muted cursor-pointer hover:text-aether-text transition-colors" />
       </div>
 
-      {/* Explorer Panel */}
-      <div className="w-60 border-r border-aether-border bg-aether-bg py-6 px-4 hidden md:block">
-        <h2 className="text-xs font-bold tracking-widest text-aether-muted uppercase mb-4">Files</h2>
+      {/* EXPLORER: Fixed Width */}
+      <div className="w-64 flex-shrink-0 border-r border-aether-border bg-aether-bg py-6 px-4 hidden md:flex flex-col">
+        <h2 className="text-[10px] font-bold tracking-widest text-aether-muted uppercase mb-4">Explorer</h2>
         <div className="text-sm space-y-1">
-          <div className="flex items-center gap-2 font-medium text-aether-text bg-aether-surface px-2 py-1.5 rounded cursor-pointer">
+          <div className="flex items-center gap-2 font-medium text-aether-text bg-aether-surface/60 px-2 py-1.5 rounded cursor-pointer border border-transparent hover:border-aether-border transition-all">
             <span className="w-1.5 h-1.5 rounded-full bg-aether-accent"></span>
             App.tsx
           </div>
-          <div className="flex items-center gap-2 text-aether-muted px-2 py-1.5 cursor-pointer hover:bg-aether-surface/50 rounded">
+          <div className="flex items-center gap-2 text-aether-muted px-2 py-1.5 cursor-pointer hover:bg-aether-surface/30 rounded transition-colors">
             <span className="w-1.5 h-1.5 rounded-full bg-aether-border"></span>
             main.ts
           </div>
-          <div className="flex items-center gap-2 text-aether-muted px-2 py-1.5 cursor-pointer hover:bg-aether-surface/50 rounded">
+          <div className="flex items-center gap-2 text-aether-muted px-2 py-1.5 cursor-pointer hover:bg-aether-surface/30 rounded transition-colors">
             <span className="w-1.5 h-1.5 rounded-full bg-aether-border"></span>
             style.css
           </div>
         </div>
       </div>
 
-      {/* Main Editor Area */}
-      <div className="flex-1 flex flex-col relative">
+      {/* MAIN CONTENT: Flex Grow */}
+      <div className="flex-1 flex flex-col min-w-0 bg-aether-bg">
+
         {/* Top Bar */}
-        <div className="h-12 border-b border-aether-border flex items-center justify-between px-6 bg-aether-bg/90 backdrop-blur z-10">
-          <div className="flex items-center gap-2 text-sm text-aether-muted">
+        <div className="h-12 flex-shrink-0 border-b border-aether-border flex items-center justify-between px-6 bg-aether-bg z-10">
+          <div className="flex items-center gap-2 text-xs text-aether-muted font-mono">
             <span>src</span>
-            <span className="opacity-30">/</span>
-            <span className="text-aether-text font-medium">App.tsx</span>
+            <span className="text-aether-border">/</span>
+            <span className="text-aether-text font-semibold">App.tsx</span>
           </div>
-          <button className="flex items-center gap-2 text-xs font-medium text-aether-accent border border-aether-border px-3 py-1.5 rounded hover:bg-aether-surface transition-colors">
+          <button className="flex items-center gap-2 text-xs font-medium text-aether-accent border border-aether-border bg-white px-3 py-1.5 rounded-md shadow-sm hover:shadow-soft transition-all active:scale-95">
             <Play size={12} fill="currentColor" /> Run
           </button>
         </div>
 
-        {/* Editor Canvas */}
-        <div className="flex-1 relative">
+        {/* Editor Area */}
+        <div className="flex-1 relative overflow-hidden">
           <AetherEditor code={code} setCode={setCode} />
         </div>
 
-        {/* Synapse Input Bar */}
-        <div className="p-4 border-t border-aether-border bg-aether-sidebar z-20">
+        {/* AI Input Bar */}
+        <div className="flex-shrink-0 p-4 border-t border-aether-border bg-aether-sidebar z-20">
           <div className={`
             flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-300
-            ${isThinking ? 'bg-white border-aether-accent shadow-md' : 'bg-aether-bg border-aether-border'}
+            ${isThinking ? 'bg-white border-aether-accent shadow-glow' : 'bg-aether-bg border-aether-border shadow-sm'}
           `}>
             {isThinking ? (
               <Zap size={18} className="text-aether-accent animate-pulse" />
@@ -173,11 +178,11 @@ export default function AetherApp() {
             <input
               disabled={isThinking}
               onKeyDown={handleAskAI}
-              placeholder={isThinking ? "Synapse düşünüyor..." : "Ask Synapse to edit this code..."}
-              className="flex-1 bg-transparent outline-none text-sm text-aether-text placeholder:text-aether-muted"
+              placeholder={isThinking ? "Synapse is generating code..." : "Ask Synapse to edit code..."}
+              className="flex-1 bg-transparent outline-none text-sm text-aether-text placeholder:text-aether-muted font-medium"
             />
 
-            {isThinking && <span className="text-[10px] text-aether-accent font-bold tracking-wide">GEMINI</span>}
+            {isThinking && <span className="text-[10px] text-aether-accent font-bold tracking-wide uppercase animate-pulse">GEMINI 2.0</span>}
           </div>
         </div>
       </div>
