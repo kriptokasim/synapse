@@ -14,7 +14,9 @@ class GeminiProvider implements AIProvider {
     name = 'Google Gemini';
     private client: any;
 
-    constructor(apiKey: string, modelName: string = 'gemini-1.5-pro-latest') {
+    // FIX: Updated model name to 'gemini-2.5-flash'
+    // This is the stable, high-intelligence model currently available in the API.
+    constructor(apiKey: string, modelName: string = 'gemini-2.5-flash') {
         const genAI = new GoogleGenerativeAI(apiKey);
         this.client = genAI.getGenerativeModel({ model: modelName });
     }

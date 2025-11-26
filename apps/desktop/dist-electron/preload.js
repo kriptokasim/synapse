@@ -10,6 +10,5 @@ const api = {
 try {
   electron.contextBridge.exposeInMainWorld("synapse", api);
 } catch (error) {
-  console.warn("[Preload] Failed to use contextBridge, falling back to window assignment:", error);
   window.synapse = api;
 }

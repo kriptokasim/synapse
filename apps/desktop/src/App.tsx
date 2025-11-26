@@ -128,6 +128,15 @@ function findLineLocal(code: string, tag: string, id: string | null, text: strin
   return null;
 }
 
+interface SelectedElementContext {
+  tag: string;
+  text: string;
+  id: string | null;
+  className: string | null;
+  lineNumber: number;
+  snippet: string;
+}
+
 // --- MAIN APP ---
 export default function AetherApp() {
   // State
@@ -137,10 +146,11 @@ export default function AetherApp() {
   const [code, setCode] = useState('// Synapse AntiGravity\n// Waiting for instructions...');
   const [isThinking, setIsThinking] = useState(false);
   const [viewMode, setViewMode] = useState<'code' | 'preview' | 'split'>('split');
-  const [previewUrl, setPreviewUrl] = useState('http://localhost:3000');
+  const [previewUrl, setPreviewUrl] = useState('about:blank');
   const [iframeKey, setIframeKey] = useState(0);
   const [isInspectorActive, setIsInspectorActive] = useState(false);
   const [revealLine, setRevealLine] = useState<number | null>(null);
+  const [selectedContext, setSelectedContext] = useState<SelectedElementContext | null>(null);
 
   // Handlers
   const handleOpenFolder = async () => {
@@ -166,63 +176,37 @@ export default function AetherApp() {
   useEffect(() => {
     const handler = async (event: MessageEvent) => {
       if (event.data.type === 'ELEMENT_CLICKED') {
-        const { tag, id, className, text, attributes } = event.data.payload;
+        const { tag, id, className, text, snippet } = event.data.payload;
         console.log("Locating:", tag, id);
 
-        // 1. Disable Inspector
+        // 1. Reset & UI Feedback
         setIsInspectorActive(false);
-        const iframe = document.querySelector('iframe');
-        iframe?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: false }, '*');
-
-        // 2. TRY LOCAL SEARCH FIRST (Instant)
-        const localMatch = findLineLocal(code, tag, id, text);
-
-        if (localMatch) {
-          console.log("✅ Local Match found at line:", localMatch);
-          if (viewMode === 'preview') setViewMode('split');
-          setRevealLine(localMatch);
-          return; // Success! No need for AI.
-        }
-
-        // 3. FALLBACK TO AI (If local search fails)
+        document.querySelector('iframe')?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: false }, '*');
         setIsThinking(true);
-        try {
-          const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
-          const ai = SynapseFactory.create('gemini', apiKey);
 
-          const prompt = `
-              I have an HTML/JSX element that I need to find in the source code.
-              
-              TARGET ELEMENT:
-              - Tag: <${tag}>
-              - Text: "${text}"
-              ${id ? `- ID: "${id}"` : ''}
-              ${className ? `- Class: "${className}"` : ''}
-              
-              SOURCE CODE:
-              ${code}
-              
-              INSTRUCTIONS:
-              Find the line number where this element is defined.
-              Return ONLY the number.
-            `;
+        // 2. Find Line Number (Existing Logic)
+        const localMatch = findLineLocal(code, tag, id, text);
+        let foundLine = localMatch;
 
-          const result = await ai.generateCode(prompt, code);
-          const lineNumber = parseInt(result.replace(/[^0-9]/g, ''));
-
-          if (!isNaN(lineNumber) && lineNumber > 0) {
-            console.log("🤖 AI Match found at line:", lineNumber);
-            if (viewMode === 'preview') setViewMode('split');
-            setRevealLine(lineNumber);
-          } else {
-            alert(`Could not locate element. (Try adding an ID to it)`);
-          }
-        } catch (e) {
-          console.error(e);
-          alert("Locator failed.");
-        } finally {
-          setIsThinking(false);
+        if (!foundLine) {
+          try {
+            const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+            const ai = SynapseFactory.create('gemini', apiKey);
+            const prompt = `Find line number for <${tag}> "${text}". Code:\n${code}\nReturn number only.`;
+            const result = await ai.generateCode(prompt, code);
+            foundLine = parseInt(result.replace(/[^0-9]/g, ''));
+          } catch (e) { console.error(e); }
         }
+
+        // 3. SET CONTEXT & SCROLL
+        if (foundLine && !isNaN(foundLine)) {
+          if (viewMode === 'preview') setViewMode('split');
+          setRevealLine(foundLine);
+          // ✨ NEW: Save context for the Chat
+          setSelectedContext({ tag, text, id, className, lineNumber: foundLine, snippet });
+        }
+
+        setIsThinking(false);
       }
     };
     window.addEventListener('message', handler);
@@ -248,17 +232,62 @@ export default function AetherApp() {
 
   const handleAskAI = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !isThinking) {
-      const prompt = (e.target as HTMLInputElement).value;
-      if (!prompt.trim()) return;
+      const userPrompt = (e.target as HTMLInputElement).value;
+      if (!userPrompt.trim()) return;
+
       setIsThinking(true);
+
       try {
         const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
-        if (!apiKey) { alert("API Key Missing"); setIsThinking(false); return; }
         const ai = SynapseFactory.create('gemini', apiKey);
+
+        let prompt = "";
+
+        // Context-Aware Prompting
+        if (selectedContext) {
+          prompt = `
+                  I have selected a specific element in the code:
+                  - Tag: <${selectedContext.tag}>
+                  - Current Line: ${selectedContext.lineNumber}
+                  - Content: "${selectedContext.text}"
+                  
+                  USER REQUEST: "${userPrompt}"
+                  
+                  FULL CODE:
+                  ${code}
+                  
+                  INSTRUCTIONS:
+                  1. Modify the code to fulfill the user request ONLY for the selected element.
+                  2. Return the FULL updated code file.
+                  3. Do not add markdown blocks. Just the code.
+                `;
+        } else {
+          // General Edit
+          prompt = `Request: "${userPrompt}". Code:\n${code}\nReturn updated code only.`;
+        }
+
         const newCode = await ai.generateCode(prompt, code);
+
+        // Apply Changes
         setCode(newCode);
-      } catch (error) { console.error(error); alert("AI Failed"); }
-      finally { setIsThinking(false); }
+
+        // Auto-save if file is open
+        if (activeFile) {
+          await window.synapse.writeFile(activeFile, newCode);
+          // Force Iframe Reload to see changes
+          setIframeKey(k => k + 1);
+        }
+
+        // Clear input
+        (e.target as HTMLInputElement).value = '';
+
+      } catch (e) {
+        console.error(e);
+        alert("AI Edit Failed");
+      } finally {
+        setIsThinking(false);
+        setSelectedContext(null); // Clear context after edit
+      }
     }
   };
 
@@ -362,6 +391,18 @@ export default function AetherApp() {
               </div>
               <p className="text-aether-text leading-relaxed">Hello! I'm ready to help you build. Describe what you want to change in the code.</p>
             </div>
+
+            {/* ✨ NEW: Context Indicator */}
+            {selectedContext && (
+              <div className="bg-aether-selection/30 p-2 rounded border border-aether-accent/20 text-xs mb-2 flex items-center gap-2">
+                <Crosshair size={12} className="text-aether-accent" />
+                <span className="font-medium">Editing:</span>
+                <code className="bg-white/50 px-1 rounded text-aether-accent font-mono">
+                  &lt;{selectedContext.tag}&gt; : {selectedContext.lineNumber}
+                </code>
+                <button onClick={() => setSelectedContext(null)} className="ml-auto hover:text-red-500"><X size={12} /></button>
+              </div>
+            )}
 
             {isThinking && (
               <div className="bg-white p-3 rounded-lg border border-aether-border text-sm shadow-sm opacity-80">

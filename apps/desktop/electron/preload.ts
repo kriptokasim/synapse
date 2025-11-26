@@ -12,6 +12,7 @@ const api = {
 try {
     contextBridge.exposeInMainWorld('synapse', api);
 } catch (error) {
-    console.warn('[Preload] Failed to use contextBridge, falling back to window assignment:', error);
+    // Context isolation is disabled, so we fall back to window assignment.
+    // This is expected behavior in this configuration.
     (window as any).synapse = api;
 }
