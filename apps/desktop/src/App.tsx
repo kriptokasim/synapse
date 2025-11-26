@@ -136,29 +136,34 @@ export default function AetherApp() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-aether-bg text-aether-text font-sans overflow-hidden border border-aether-border rounded-lg shadow-2xl">
+    <div className="relative flex h-screen w-screen bg-aether-bg text-aether-text font-sans overflow-hidden border border-aether-border rounded-lg shadow-2xl">
 
       {/* HEADER */}
       <div className="absolute top-0 left-0 w-full h-10 z-50 flex justify-between items-center drag-region" style={{ WebkitAppRegion: 'drag' } as any}>
-        <div className="px-4 flex items-center gap-4">
-          <span className="text-xs font-bold tracking-widest text-aether-accent opacity-50">AETHER</span>
-
-          {/* View Mode Toggle */}
-          <div className="flex bg-aether-surface rounded-lg p-0.5 no-drag">
-            <button onClick={() => setViewMode('code')} className={`p-1 rounded ${viewMode === 'code' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><Code size={12} /></button>
-            <button onClick={() => setViewMode('split')} className={`p-1 rounded ${viewMode === 'split' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><LayoutTemplate size={12} /></button>
-            <button onClick={() => setViewMode('preview')} className={`p-1 rounded ${viewMode === 'preview' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><Eye size={12} /></button>
+        <div className="flex items-center">
+          {/* Logo aligned with sidebar */}
+          <div className="w-16 flex justify-center items-center">
+            <span className="text-[10px] font-bold tracking-widest text-aether-accent opacity-50">AETHER</span>
           </div>
 
-          {/* URL Bar */}
-          <div className="flex items-center gap-2 bg-aether-surface px-2 py-0.5 rounded-md no-drag w-64">
-            <Globe size={10} className="text-aether-muted" />
-            <input
-              value={previewUrl}
-              onChange={(e) => setPreviewUrl(e.target.value)}
-              className="bg-transparent outline-none text-[10px] w-full font-mono text-aether-text"
-            />
-            <button onClick={() => setIframeKey(k => k + 1)}><RefreshCw size={10} className="text-aether-muted hover:text-aether-accent" /></button>
+          <div className="flex items-center gap-4 pl-2">
+            {/* View Mode Toggle */}
+            <div className="flex bg-aether-surface rounded-lg p-0.5 no-drag">
+              <button onClick={() => setViewMode('code')} className={`p-1 rounded ${viewMode === 'code' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><Code size={12} /></button>
+              <button onClick={() => setViewMode('split')} className={`p-1 rounded ${viewMode === 'split' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><LayoutTemplate size={12} /></button>
+              <button onClick={() => setViewMode('preview')} className={`p-1 rounded ${viewMode === 'preview' ? 'bg-white shadow-sm text-aether-text' : 'text-aether-muted'}`}><Eye size={12} /></button>
+            </div>
+
+            {/* URL Bar */}
+            <div className="flex items-center gap-2 bg-aether-surface px-2 py-0.5 rounded-md no-drag w-64">
+              <Globe size={10} className="text-aether-muted" />
+              <input
+                value={previewUrl}
+                onChange={(e) => setPreviewUrl(e.target.value)}
+                className="bg-transparent outline-none text-[10px] w-full font-mono text-aether-text"
+              />
+              <button onClick={() => setIframeKey(k => k + 1)}><RefreshCw size={10} className="text-aether-muted hover:text-aether-accent" /></button>
+            </div>
           </div>
         </div>
         <WindowControls />
