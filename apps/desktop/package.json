@@ -1,7 +1,6 @@
 {
   "name": "desktop",
   "private": true,
-  "type": "module",
   "main": "dist-electron/main.js",
   "version": "0.0.0",
   "scripts": {
