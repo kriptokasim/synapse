@@ -26,6 +26,7 @@ function createWindow() {
             preload: preloadPath,
             nodeIntegration: true,
             contextIsolation: false,  // Prototype mode
+            webSecurity: false,       // ⚡ CRITICAL: Allows iframe script injection
         },
     });
 
