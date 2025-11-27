@@ -76,14 +76,14 @@ export const Sash: React.FC<SashProps> = ({
 
     return (
         <div
-            className={`z-50 flex items-center justify-center hover:bg-aether-accent/50 transition-colors select-none ${orientation === 'vertical'
-                ? 'w-1 h-full -mx-0.5 cursor-col-resize'
-                : 'h-1 w-full -my-0.5 cursor-row-resize'
+            className={`z-50 flex items-center justify-center hover:bg-aether-accent transition-colors select-none ${orientation === 'vertical'
+                    ? 'w-4 h-full -mx-2 cursor-col-resize'
+                    : 'h-4 w-full -my-2 cursor-row-resize'
                 } ${className} ${isResizing ? 'bg-aether-accent' : ''}`}
             onMouseDown={handleMouseDown}
         >
             {/* Visual handle line */}
-            <div className={`bg-aether-border ${orientation === 'vertical' ? 'w-[1px] h-full' : 'h-[1px] w-full'
+            <div className={`bg-aether-border pointer-events-none ${orientation === 'vertical' ? 'w-[1px] h-full' : 'h-[1px] w-full'
                 }`} />
         </div>
     );

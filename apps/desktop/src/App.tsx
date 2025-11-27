@@ -305,7 +305,7 @@ export default function App() {
             </div>
 
             <div className="flex-1 flex overflow-hidden">
-              <SplitView storageKey="center-layout" orientation="horizontal" className="flex-1">
+              <SplitView storageKey="center-layout" orientation="vertical" className="flex-1">
                 {/* Editor (Flex) */}
                 <Pane id="editor" flex className="relative h-full">
                   <AetherEditor code={code} setCode={setCode} revealLine={selectedContext?.lineNumber || 0} />
