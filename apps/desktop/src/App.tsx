@@ -353,14 +353,9 @@ export default function App() {
 
             {/* Live Preview - Fixed Toggle Logic */}
             <div
-              className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 ${isPreviewVisible ? 'w-[40%]' : 'w-0 border-l-0'
+              className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 ease-in-out shrink-0 ${isPreviewVisible ? 'w-[40%]' : 'w-0 border-l-0'
                 }`}
-              style={{
-                flex: isPreviewVisible ? '0 0 40%' : '0 0 0',
-                overflow: 'hidden'
-              }}
-            >
-              <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
+            >            <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
                 <button onClick={toggleInspector} className={`p-1 rounded ${isInspectorActive ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`} title="Inspect Element">
                   <Crosshair size={14} />
                 </button>
