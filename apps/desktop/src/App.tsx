@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import {
+  Minus, Square, X,
+  RefreshCw, Globe, Crosshair, Check,
+  Zap, Paperclip, Brain, ArrowUp,
   ChevronRight, MoreHorizontal,
-  Terminal, CheckCircle2, Circle,
-  Minus, Square, X, Globe, Crosshair, RefreshCw,
-  Brain, Zap, Paperclip, ArrowUp, GitGraph, Check
+  Terminal, CheckCircle2, GitGraph
 } from 'lucide-react';
 import { SynapseFactory } from './ai/UniversalGateway';
 import type { AIModelMode } from './ai/UniversalGateway';
@@ -100,7 +101,7 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
         overviewRulerBorder: false,
         renderLineHighlight: 'all',
         hideCursorInOverviewRuler: true,
-        automaticLayout: true,
+        automaticLayout: true, // Important for resize
         scrollBeyondLastLine: false,
         cursorBlinking: 'smooth',
         cursorSmoothCaretAnimation: 'on',
@@ -112,7 +113,7 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
 // --- MAIN APP ---
 export default function App() {
   // State
-  const [code, setCode] = useState('// Synapse Aether v3.2\n// Ready to code...');
+  const [code, setCode] = useState('// Synapse Aether v3.3\n// Ready to code...');
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
 
@@ -345,15 +346,19 @@ export default function App() {
           </div>
 
           <div className="flex-1 flex overflow-hidden">
-            {/* Code Editor - Takes all available space when preview is closed */}
-            <div className={`flex-1 relative border-r border-aether-border transition-all duration-300`}>
+            {/* Code Editor - Simplified Logic */}
+            <div className={`flex-1 relative border-r border-aether-border`}>
               <AetherEditor code={code} setCode={setCode} revealLine={0} />
             </div>
 
-            {/* Live Preview - Fixed Width/Zero Width Toggle */}
+            {/* Live Preview - Fixed Toggle Logic */}
             <div
-              className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 ease-in-out overflow-hidden ${isPreviewVisible ? 'flex-1 min-w-[300px]' : 'w-0 flex-none border-l-0'
+              className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 ${isPreviewVisible ? 'w-[40%]' : 'w-0 border-l-0'
                 }`}
+              style={{
+                flex: isPreviewVisible ? '0 0 40%' : '0 0 0',
+                overflow: 'hidden'
+              }}
             >
               <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
                 <button onClick={toggleInspector} className={`p-1 rounded ${isInspectorActive ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`} title="Inspect Element">
@@ -382,14 +387,13 @@ export default function App() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-aether-bg/50" ref={chatScrollRef}>
-            {/* Task Card */}
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-white border border-aether-accent shadow-paper relative overflow-hidden">
-              <div className="absolute left-0 top-0 bottom-0 w-1 bg-aether-accent"></div>
-              <div className="mt-0.5 text-aether-accent animate-pulse"><Circle size={14} /></div>
-              <div className="flex-1">
-                <div className="text-xs font-bold text-aether-text mb-1">User Request</div>
-                <div className="text-xs text-aether-text leading-relaxed">
-                  "{messages.filter(m => m.role === 'user').slice(-1)[0]?.content || "Waiting for instructions..."}"
+            {/* Task List Mock */}
+            <div className="space-y-2">
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-aether-panel border border-aether-border shadow-paper">
+                <div className="mt-0.5 text-aether-success"><CheckCircle2 size={14} /></div>
+                <div className="flex-1">
+                  <div className="text-xs font-bold text-aether-text mb-1">Project Status</div>
+                  <div className="text-xxs text-aether-muted">System initialized and ready.</div>
                 </div>
               </div>
             </div>
