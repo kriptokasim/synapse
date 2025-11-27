@@ -93,7 +93,7 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
       options={{
         minimap: { enabled: false },
         fontFamily: "'JetBrains Mono', monospace",
-        fontSize: 13,
+        fontSize: 13.5,
         lineHeight: 1.6,
         padding: { top: 24 },
         smoothScrolling: true,
@@ -102,6 +102,8 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
         hideCursorInOverviewRuler: true,
         automaticLayout: true,
         scrollBeyondLastLine: false,
+        cursorBlinking: 'smooth',
+        cursorSmoothCaretAnimation: 'on',
       }}
     />
   );
@@ -110,12 +112,12 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
 // --- MAIN APP ---
 export default function App() {
   // State
-  const [code, setCode] = useState('// Synapse Aether v3\n// Ready to build...');
+  const [code, setCode] = useState('// Synapse Aether v3.1\n// Ready to code...');
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
 
   // UI State
-  const [viewMode, setViewMode] = useState<'code' | 'split'>('split');
+  const [isPreviewVisible, setIsPreviewVisible] = useState(true); // Simplified State
   const [previewUrl, setPreviewUrl] = useState('about:blank');
   const [iframeKey, setIframeKey] = useState(0);
   const [isInspectorActive, setIsInspectorActive] = useState(false);
@@ -126,7 +128,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : [{
       id: 'init',
       role: 'model',
-      content: 'I am ready. Assign me a task or ask a question.',
+      content: 'Synapse ready. Assign me a task.',
       type: 'message'
     }];
   });
@@ -180,6 +182,7 @@ export default function App() {
         let foundLine = lines.findIndex(l => l.includes(`id="${id}"`) || l.includes(`<${tag}`)) + 1;
         if (foundLine === 0) foundLine = 1;
 
+        setIsPreviewVisible(true);
         setSelectedContext({ tag, selector, lineNumber: foundLine, snippet });
       }
     };
@@ -192,11 +195,15 @@ export default function App() {
     document.querySelector('iframe')?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: !isInspectorActive }, '*');
   };
 
-  const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement, Event>) => {
-    const iframe = e.currentTarget;
-    if (iframe.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'INJECT_SCRIPT', script: INSPECTOR_SCRIPT }, '*');
-    }
+  const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+    try {
+      const doc = e.currentTarget.contentDocument;
+      if (doc) {
+        const script = doc.createElement('script');
+        script.text = INSPECTOR_SCRIPT;
+        doc.body.appendChild(script);
+      }
+    } catch (e) { }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -235,7 +242,6 @@ export default function App() {
 
       const botMsgId = (Date.now() + 1).toString();
 
-      // Add a "Thought" block first if in thinking mode
       if (aiMode === 'thinking') {
         setMessages(prev => [...prev, {
           id: botMsgId + '_thought',
@@ -258,7 +264,6 @@ export default function App() {
         setIframeKey(k => k + 1);
       }
 
-      // Final "Task Done" message
       const doneMsg: ChatMessage = {
         id: botMsgId,
         role: 'model',
@@ -285,7 +290,6 @@ export default function App() {
           <div className="flex gap-3 text-xs font-medium text-aether-text/80">
             <span className="hover:text-aether-accent cursor-pointer">File</span>
             <span className="hover:text-aether-accent cursor-pointer">Edit</span>
-            <span className="hover:text-aether-accent cursor-pointer">Selection</span>
             <span className="hover:text-aether-accent cursor-pointer">View</span>
           </div>
         </div>
@@ -331,31 +335,23 @@ export default function App() {
             <div className="px-4 py-2 bg-aether-bg border-r border-aether-border text-xs font-medium text-aether-text flex items-center gap-2 border-t-2 border-t-aether-accent">
               <span>{activeFile ? activeFile.split(/[\\/]/).pop() : 'Welcome'}</span>
               <button
-                onClick={() => {
-                  setViewMode(prev => {
-                    const newMode = prev === 'split' ? 'code' : 'split';
-                    console.log('Toggle Preview:', prev, '->', newMode);
-                    return newMode;
-                  });
-                }}
-                className={`ml-4 px-2 py-0.5 rounded-full border border-aether-border flex items-center gap-1 transition-colors ${viewMode === 'split' ? 'bg-aether-accent text-white' : 'bg-aether-sidebar text-aether-text'}`}
+                onClick={() => setIsPreviewVisible(!isPreviewVisible)}
+                className={`ml-4 px-2 py-0.5 rounded-full border border-aether-border flex items-center gap-1 transition-colors ${isPreviewVisible ? 'bg-aether-accent text-white' : 'bg-aether-sidebar text-aether-text'}`}
               >
                 <Globe size={10} />
-                <span>{viewMode === 'split' ? 'Hide Preview' : 'Show Preview'}</span>
+                <span>{isPreviewVisible ? 'Hide Preview' : 'Show Preview'}</span>
               </button>
             </div>
           </div>
 
           <div className="flex-1 flex overflow-hidden">
-            {/* Code Editor */}
-            <div className={`relative border-r border-aether-border transition-all duration-300 ${viewMode === 'split' ? 'flex-1' : 'w-full'}`}>
+            {/* Code Editor (Always Flex-1, takes remaining space) */}
+            <div className={`flex-1 relative border-r border-aether-border transition-all duration-300`}>
               <AetherEditor code={code} setCode={setCode} revealLine={0} />
             </div>
 
-            {/* Live Preview (Toggleable) */}
-            <div
-              className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 overflow-hidden ${viewMode === 'split' ? 'flex-1' : 'w-0'}`}
-            >
+            {/* Live Preview (Conditional Class for Visibility) */}
+            <div className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 overflow-hidden ${isPreviewVisible ? 'flex-1 min-w-[300px]' : 'w-0 hidden'}`}>
               <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2">
                 <button onClick={toggleInspector} className={`p-1 rounded ${isInspectorActive ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`} title="Inspect Element">
                   <Crosshair size={14} />
@@ -395,17 +391,17 @@ export default function App() {
               <div className="flex items-start gap-3 p-3 rounded-lg bg-aether-panel border border-aether-border shadow-paper">
                 <div className="mt-0.5 text-aether-success"><CheckCircle2 size={14} /></div>
                 <div className="flex-1">
-                  <div className="text-xs font-bold text-aether-text mb-1">Initialize Project</div>
-                  <div className="text-xxs text-aether-muted">Set up environment and base files.</div>
+                  <div className="text-xs font-bold text-aether-text mb-1">Project Status</div>
+                  <div className="text-xxs text-aether-muted">System initialized and ready.</div>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-3 rounded-lg bg-white border border-aether-accent shadow-paper relative overflow-hidden">
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-aether-accent"></div>
                 <div className="mt-0.5 text-aether-accent animate-pulse"><Circle size={14} /></div>
                 <div className="flex-1">
-                  <div className="text-xs font-bold text-aether-text mb-1">User Request</div>
+                  <div className="text-xs font-bold text-aether-text mb-1">Awaiting Input</div>
                   <div className="text-xs text-aether-text leading-relaxed">
-                    "{messages.filter(m => m.role === 'user').slice(-1)[0]?.content || "Waiting for instructions..."}"
+                    "{messages.filter(m => m.role === 'user').slice(-1)[0]?.content || "What should we build today?"}"
                   </div>
                 </div>
               </div>
@@ -463,7 +459,7 @@ export default function App() {
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAskAI())}
                 placeholder="Ask anything (Ctrl+L)"
-                className="w-full bg-transparent text-sm p-3 min-h-[50px] max-h-[200px] outline-none resize-none placeholder:text-aether-muted/70 text-aether-text"
+                className="w-full bg-transparent text-sm p-3 min-h-[60px] max-h-[200px] outline-none resize-none placeholder:text-aether-muted/70 text-aether-text"
               />
 
               <div className="flex items-center justify-between px-2 pb-2">
