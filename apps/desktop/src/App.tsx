@@ -3,7 +3,7 @@ import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import {
   ChevronRight, MoreHorizontal,
-  Terminal, CheckCircle2, Circle, Clock,
+  Terminal, CheckCircle2, Circle,
   Minus, Square, X, Globe, Crosshair, RefreshCw,
   Brain, Zap, Paperclip, ArrowUp, GitGraph, Check
 } from 'lucide-react';
@@ -35,7 +35,7 @@ interface SelectedContext {
 
 // --- COMPONENTS ---
 
-// 1. Aether Editor (Clean & Minimal)
+// 1. Aether Editor
 const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: any, revealLine: number | null }) => {
   const monacoInstance = useMonaco();
   const editorRef = useRef<any>(null);
@@ -112,12 +112,12 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
 // --- MAIN APP ---
 export default function App() {
   // State
-  const [code, setCode] = useState('// Synapse Aether v3.1\n// Ready to code...');
+  const [code, setCode] = useState('// Synapse Aether v3.2\n// Ready to code...');
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
 
   // UI State
-  const [isPreviewVisible, setIsPreviewVisible] = useState(true); // Simplified State
+  const [isPreviewVisible, setIsPreviewVisible] = useState(true);
   const [previewUrl, setPreviewUrl] = useState('about:blank');
   const [iframeKey, setIframeKey] = useState(0);
   const [isInspectorActive, setIsInspectorActive] = useState(false);
@@ -345,14 +345,17 @@ export default function App() {
           </div>
 
           <div className="flex-1 flex overflow-hidden">
-            {/* Code Editor (Always Flex-1, takes remaining space) */}
+            {/* Code Editor - Takes all available space when preview is closed */}
             <div className={`flex-1 relative border-r border-aether-border transition-all duration-300`}>
               <AetherEditor code={code} setCode={setCode} revealLine={0} />
             </div>
 
-            {/* Live Preview (Conditional Class for Visibility) */}
-            <div className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 overflow-hidden ${isPreviewVisible ? 'flex-1 min-w-[300px]' : 'w-0 hidden'}`}>
-              <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2">
+            {/* Live Preview - Fixed Width/Zero Width Toggle */}
+            <div
+              className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 ease-in-out overflow-hidden ${isPreviewVisible ? 'flex-1 min-w-[300px]' : 'w-0 flex-none border-l-0'
+                }`}
+            >
+              <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
                 <button onClick={toggleInspector} className={`p-1 rounded ${isInspectorActive ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`} title="Inspect Element">
                   <Crosshair size={14} />
                 </button>
@@ -368,46 +371,30 @@ export default function App() {
           </div>
         </div>
 
-        {/* C. AGENT MANAGER (Right Panel - Void Style) */}
+        {/* C. AGENT MANAGER */}
         <div className="w-[400px] flex flex-col bg-aether-bg border-l border-aether-border shrink-0 shadow-xl z-20">
-
-          {/* Header: Task Title */}
           <div className="h-12 flex items-center justify-between px-4 border-b border-aether-border bg-aether-bg">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={16} className="text-aether-success" />
               <span className="text-sm font-bold text-aether-text">Current Task</span>
             </div>
-            <div className="flex gap-2">
-              <button className="p-1.5 hover:bg-aether-sidebar rounded text-aether-muted"><Clock size={14} /></button>
-              <button className="p-1.5 hover:bg-aether-sidebar rounded text-aether-muted"><MoreHorizontal size={14} /></button>
-            </div>
+            <button className="p-1.5 hover:bg-aether-sidebar rounded text-aether-muted"><MoreHorizontal size={14} /></button>
           </div>
 
-          {/* Agent Content (Scrollable) */}
           <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-aether-bg/50" ref={chatScrollRef}>
-
-            {/* Task List Mock */}
-            <div className="space-y-2">
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-aether-panel border border-aether-border shadow-paper">
-                <div className="mt-0.5 text-aether-success"><CheckCircle2 size={14} /></div>
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-aether-text mb-1">Project Status</div>
-                  <div className="text-xxs text-aether-muted">System initialized and ready.</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-white border border-aether-accent shadow-paper relative overflow-hidden">
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-aether-accent"></div>
-                <div className="mt-0.5 text-aether-accent animate-pulse"><Circle size={14} /></div>
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-aether-text mb-1">Awaiting Input</div>
-                  <div className="text-xs text-aether-text leading-relaxed">
-                    "{messages.filter(m => m.role === 'user').slice(-1)[0]?.content || "What should we build today?"}"
-                  </div>
+            {/* Task Card */}
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-white border border-aether-accent shadow-paper relative overflow-hidden">
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-aether-accent"></div>
+              <div className="mt-0.5 text-aether-accent animate-pulse"><Circle size={14} /></div>
+              <div className="flex-1">
+                <div className="text-xs font-bold text-aether-text mb-1">User Request</div>
+                <div className="text-xs text-aether-text leading-relaxed">
+                  "{messages.filter(m => m.role === 'user').slice(-1)[0]?.content || "Waiting for instructions..."}"
                 </div>
               </div>
             </div>
 
-            {/* Thoughts & Messages */}
+            {/* Messages */}
             {messages.map((msg) => (
               <div key={msg.id} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {msg.type === 'thought' && (
@@ -416,17 +403,11 @@ export default function App() {
                     <span className="italic">{msg.content}</span>
                   </div>
                 )}
-
-                {msg.type === 'message' && msg.role === 'model' && (
-                  <div className="pl-4 border-l-2 border-aether-border ml-1.5">
-                    <div className="text-xs text-aether-text leading-relaxed">{msg.content}</div>
-                  </div>
-                )}
-
-                {msg.type === 'message' && msg.role === 'user' && (
-                  <div className="bg-white p-3 rounded-lg border border-aether-accent shadow-sm mb-2">
-                    <div className="text-xs text-aether-text">{msg.content}</div>
-                    {msg.image && <img src={msg.image} className="mt-2 max-h-20 rounded border border-gray-200" />}
+                {msg.type === 'message' && (
+                  <div className={`p-3 rounded-lg shadow-sm text-xs leading-relaxed ${msg.role === 'user' ? 'bg-white border border-aether-accent/50' : 'pl-4 border-l-2 border-aether-border ml-1'
+                    }`}>
+                    {msg.image && <img src={msg.image} className="mb-2 max-h-20 rounded border border-gray-200" />}
+                    {msg.content}
                   </div>
                 )}
               </div>
@@ -435,15 +416,13 @@ export default function App() {
             {isThinking && (
               <div className="flex items-center gap-2 text-xs text-aether-accent px-2 animate-pulse">
                 <Zap size={12} />
-                <span>Synapse is generating code...</span>
+                <span>Generating...</span>
               </div>
             )}
           </div>
 
-          {/* Bottom Input Area (Fixed) */}
+          {/* Input Area */}
           <div className="p-4 border-t border-aether-border bg-aether-bg">
-
-            {/* Context Chip */}
             {selectedContext && (
               <div className="flex items-center gap-2 mb-2 text-xs bg-aether-selection px-2 py-1 rounded border border-aether-accent/20 w-fit">
                 <Crosshair size={12} className="text-aether-accent" />
@@ -452,24 +431,20 @@ export default function App() {
               </div>
             )}
 
-            {/* Input Box */}
             <div className="relative bg-white border border-aether-border rounded-xl shadow-float focus-within:ring-2 focus-within:ring-aether-accent/50 transition-all">
               <textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAskAI())}
                 placeholder="Ask anything (Ctrl+L)"
-                className="w-full bg-transparent text-sm p-3 min-h-[60px] max-h-[200px] outline-none resize-none placeholder:text-aether-muted/70 text-aether-text"
+                className="w-full bg-transparent text-sm p-3 min-h-[50px] max-h-[200px] outline-none resize-none placeholder:text-aether-muted/70 text-aether-text"
               />
-
               <div className="flex items-center justify-between px-2 pb-2">
                 <div className="flex gap-1">
-                  <div className="relative group">
-                    <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-                    <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded hover:bg-aether-sidebar text-aether-muted hover:text-aether-text transition-colors" title="Attach Image">
-                      <Paperclip size={14} />
-                    </button>
-                  </div>
+                  <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+                  <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded hover:bg-aether-sidebar text-aether-muted hover:text-aether-text transition-colors">
+                    <Paperclip size={14} />
+                  </button>
                   <button
                     onClick={() => setAiMode(aiMode === 'thinking' ? 'standard' : 'thinking')}
                     className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${aiMode === 'thinking' ? 'bg-aether-accent text-white' : 'text-aether-muted hover:bg-aether-sidebar'}`}
@@ -478,7 +453,6 @@ export default function App() {
                     <span>{aiMode}</span>
                   </button>
                 </div>
-
                 <button
                   onClick={() => handleAskAI()}
                   disabled={(!chatInput.trim() && !attachedImage) || isThinking}
