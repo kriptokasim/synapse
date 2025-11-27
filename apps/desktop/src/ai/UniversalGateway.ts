@@ -20,11 +20,11 @@ class GeminiProvider implements AIProvider {
     }
 
     async generateCode(prompt: string, context: string, options: GenerateOptions = { mode: 'standard' }): Promise<string> {
-        let modelName = 'gemini-2.5-flash';
+        let modelName = 'gemini-2.5-pro';
 
         // Enhanced Model Selection
         switch (options.mode) {
-            case 'fast': modelName = 'gemini-2.5-pro'; break;
+            case 'fast': modelName = 'gemini-2.5-flash'; break;
             case 'thinking': modelName = 'gemini-2.5-pro'; break; // The "Brain"
             default: modelName = 'gemini-2.5-pro'; break;
         }
