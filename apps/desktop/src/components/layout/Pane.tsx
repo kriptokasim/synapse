@@ -27,14 +27,20 @@ export const Pane: React.FC<PaneProps & { size?: number; orientation?: 'vertical
 
     const styleProps: React.CSSProperties = {
         flex: flex ? '1 1 0%' : 'none',
-        display: visible ? 'block' : 'none',
+        display: visible ? undefined : 'none',
         ...style
     };
 
-    if (!flex) {
-        if (orientation === 'vertical') {
+    if (orientation === 'vertical') {
+        // Vertical Split (Row): Height is 100%, Width is managed
+        styleProps.height = '100%';
+        if (!flex) {
             styleProps.width = size;
-        } else {
+        }
+    } else {
+        // Horizontal Split (Column): Width is 100%, Height is managed
+        styleProps.width = '100%';
+        if (!flex) {
             styleProps.height = size;
         }
     }

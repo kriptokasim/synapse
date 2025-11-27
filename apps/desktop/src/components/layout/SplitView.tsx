@@ -19,6 +19,7 @@ export const SplitView: React.FC<SplitViewProps> = ({
     // Convert children to array and filter nulls
     const panes = React.Children.toArray(children) as React.ReactElement<PaneProps>[];
     const visiblePanes = panes.filter(p => p.props.visible !== false);
+    const hiddenPanes = panes.filter(p => p.props.visible === false);
 
     // Initialize sizes from storage or defaults
     const [sizes, setSizes] = useState<Record<string, number>>(() => {
@@ -35,7 +36,7 @@ export const SplitView: React.FC<SplitViewProps> = ({
 
         // Default initialization
         const initialSizes: Record<string, number> = {};
-        visiblePanes.forEach(pane => {
+        panes.forEach(pane => {
             if (!pane.props.flex) {
                 initialSizes[pane.props.id] = pane.props.defaultSize || 200;
             }
@@ -148,6 +149,16 @@ export const SplitView: React.FC<SplitViewProps> = ({
                     </React.Fragment>
                 );
             })}
+
+            {/* Render hidden panes to preserve state */}
+            {hiddenPanes.map(pane => (
+                <Pane
+                    key={pane.props.id}
+                    {...pane.props}
+                    visible={false}
+                    orientation={orientation}
+                />
+            ))}
         </div>
     );
 };
