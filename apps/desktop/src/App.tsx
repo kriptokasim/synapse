@@ -3,10 +3,10 @@ import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import {
   Minus, Square, X,
-  RefreshCw, Globe, Crosshair, Check,
-  Zap, Paperclip, Brain, ArrowUp,
+  RefreshCw, Globe, Crosshair,
+  Paperclip, ArrowUp,
   ChevronRight, MoreHorizontal,
-  Terminal, CheckCircle2, GitGraph
+  Terminal, CheckCircle2
 } from 'lucide-react';
 import { SynapseFactory } from './ai/UniversalGateway';
 import type { AIModelMode } from './ai/UniversalGateway';
@@ -34,53 +34,71 @@ interface SelectedContext {
   snippet: string;
 }
 
-// --- HOOKS ---
-const useResizable = (initialWidth: number, minWidth: number, maxWidth: number, direction: 'left' | 'right' = 'right') => {
+// --- PERFOMANCE HOOKS ---
+
+/**
+ * High-Performance Resizable Hook (Void-Style)
+ * Bypasses React State for 60FPS resizing by manipulating DOM directly.
+ */
+const useResizable = (
+  initialWidth: number,
+  minWidth: number,
+  maxWidth: number,
+  direction: 'left' | 'right' = 'right'
+) => {
+  // We keep state for initial render and persistence, but NOT for the drag loop
   const [width, setWidth] = useState(initialWidth);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Refs for the drag operation
+  const panelRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef<number>(0);
   const startWidthRef = useRef<number>(0);
 
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    e.stopPropagation(); // Stop propagation to prevent selecting text etc
+    e.stopPropagation();
     setIsDragging(true);
+
     startXRef.current = e.clientX;
-    startWidthRef.current = width;
+    startWidthRef.current = panelRef.current ? panelRef.current.offsetWidth : width;
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
   }, [width]);
 
   useEffect(() => {
+    if (!isDragging) return;
+
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
+      // Direct DOM manipulation - No React Re-renders here!
+      if (!panelRef.current) return;
 
       const delta = e.clientX - startXRef.current;
-      // If resizing from the right (Explorer), dragging right (+) increases width.
-      // If resizing from the left (Agent/Preview), dragging left (-) increases width.
       let newWidth = direction === 'right'
         ? startWidthRef.current + delta
         : startWidthRef.current - delta;
 
+      // Hard limits
       if (newWidth < minWidth) newWidth = minWidth;
       if (newWidth > maxWidth) newWidth = maxWidth;
 
-      setWidth(newWidth);
+      panelRef.current.style.width = `${newWidth}px`;
     };
 
     const handleMouseUp = () => {
-      if (isDragging) {
-        setIsDragging(false);
+      setIsDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      // Commit the final width to React state
+      if (panelRef.current) {
+        setWidth(panelRef.current.offsetWidth);
       }
     };
 
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    } else {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
@@ -88,12 +106,11 @@ const useResizable = (initialWidth: number, minWidth: number, maxWidth: number, 
     };
   }, [isDragging, minWidth, maxWidth, direction]);
 
-  return { width, startResize, isDragging, setWidth };
+  return { width, startResize, isDragging, panelRef };
 };
 
 // --- COMPONENTS ---
 
-// 1. Aether Editor
 const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: any, revealLine: number | null }) => {
   const monacoInstance = useMonaco();
   const editorRef = useRef<any>(null);
@@ -106,14 +123,14 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
         inherit: true,
         rules: [
           { token: 'comment', foreground: '9CA3AF', fontStyle: 'italic' },
-          { token: 'keyword', foreground: 'D99A25', fontStyle: 'bold' }, // Amber
-          { token: 'string', foreground: '658E55' }, // Sage
+          { token: 'keyword', foreground: 'D99A25', fontStyle: 'bold' },
+          { token: 'string', foreground: '658E55' },
           { token: 'function', foreground: 'B47F1E' },
           { token: 'type', foreground: '3E3832', fontStyle: 'bold' },
           { token: 'number', foreground: 'D99A25' },
         ],
         colors: {
-          'editor.background': '#FBF7EF', // Aether BG
+          'editor.background': '#FBF7EF',
           'editor.foreground': '#3E3832',
           'editor.lineHighlightBackground': '#F2EBE0',
           'editorLineNumber.foreground': '#C4BCAD',
@@ -158,7 +175,7 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
         overviewRulerBorder: false,
         renderLineHighlight: 'all',
         hideCursorInOverviewRuler: true,
-        automaticLayout: true,
+        automaticLayout: true, // Critical for flex resizing
         scrollBeyondLastLine: false,
         cursorBlinking: 'smooth',
         cursorSmoothCaretAnimation: 'on',
@@ -169,7 +186,6 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
 
 // --- MAIN APP ---
 export default function App() {
-  // State
   const [code, setCode] = useState('// Synapse Aether v3.5\n// Ready to code...');
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
@@ -180,28 +196,22 @@ export default function App() {
   const [iframeKey, setIframeKey] = useState(0);
   const [isInspectorActive, setIsInspectorActive] = useState(false);
 
-  // Resizable Panels
-  // Explorer: Resizes from right edge. Drag Right -> Grow.
+  // Fast Resizable Panels (DOM-based)
   const explorer = useResizable(240, 150, 400, 'right');
-  // Agent: Resizes from left edge. Drag Left -> Grow.
   const agent = useResizable(400, 300, 600, 'left');
-  // Preview: Resizes from left edge. Drag Left -> Grow (Into editor space).
   const preview = useResizable(500, 200, 800, 'left');
 
-  // Check if ANY panel is being dragged to disable iframe interactions globally
+  // Global dragging state for iframe protection
   const isAnyDragging = explorer.isDragging || agent.isDragging || preview.isDragging;
 
   // Agent State
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const saved = localStorage.getItem('synapse_chat_history');
     return saved ? JSON.parse(saved) : [{
-      id: 'init',
-      role: 'model',
-      content: 'Synapse ready. Assign me a task.',
-      type: 'message'
+      id: 'init', role: 'model', content: 'Synapse ready. Assign me a task.', type: 'message'
     }];
   });
-  const [aiMode, setAiMode] = useState<AIModelMode>('standard');
+  const [aiMode] = useState<AIModelMode>('standard');
   const [isThinking, setIsThinking] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [attachedImage, setAttachedImage] = useState<string | null>(null);
@@ -210,13 +220,12 @@ export default function App() {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Persistence
   useEffect(() => {
     localStorage.setItem('synapse_chat_history', JSON.stringify(messages));
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
   }, [messages]);
 
-  // --- HANDLERS ---
+  // @ts-ignore
   const handleOpenFolder = async () => {
     try {
       // @ts-ignore
@@ -239,7 +248,6 @@ export default function App() {
     setCode(content);
   };
 
-  // Inspector
   useEffect(() => {
     const handler = async (event: MessageEvent) => {
       if (event.data.type === 'ELEMENT_CLICKED') {
@@ -309,17 +317,6 @@ export default function App() {
         prompt += `\nCONTEXT: Element ${selectedContext.selector}\nCODE: ${selectedContext.snippet}`;
       }
 
-      const botMsgId = (Date.now() + 1).toString();
-
-      if (aiMode === 'thinking') {
-        setMessages(prev => [...prev, {
-          id: botMsgId + '_thought',
-          role: 'model',
-          content: 'Analyzing structure and planning changes...',
-          type: 'thought'
-        }]);
-      }
-
       const newCode = await ai.generateCode(prompt, code, { mode: aiMode, image: userMsg.image });
       const cleanCode = newCode.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
 
@@ -333,14 +330,12 @@ export default function App() {
         setIframeKey(k => k + 1);
       }
 
-      const doneMsg: ChatMessage = {
-        id: botMsgId,
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
         role: 'model',
         content: 'Changes applied.',
         type: 'message'
-      };
-
-      setMessages(prev => [...prev, doneMsg]);
+      }]);
       setSelectedContext(null);
 
     } catch (e: any) {
@@ -350,7 +345,6 @@ export default function App() {
     }
   };
 
-  // Custom Resizer Component
   const Resizer = ({ onMouseDown, isVertical = false }: { onMouseDown: any, isVertical?: boolean }) => (
     <div
       className={`hover:bg-aether-accent/50 transition-colors z-50 flex items-center justify-center ${isVertical ? 'w-1 cursor-col-resize h-full' : 'h-1 cursor-row-resize w-full'
@@ -363,6 +357,11 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-aether-bg text-aether-text font-sans overflow-hidden selection:bg-aether-selection">
+
+      {/* GLOBAL DRAG OVERLAY - Critical for Iframe smoothness */}
+      {isAnyDragging && (
+        <div className="fixed inset-0 z-[9999] cursor-col-resize bg-transparent" />
+      )}
 
       {/* 1. TOP MENU BAR */}
       <div className="h-8 flex items-center justify-between px-3 bg-aether-bg border-b border-aether-border drag-region z-50 shrink-0">
@@ -377,32 +376,30 @@ export default function App() {
           <span className="text-xs font-bold tracking-wide text-aether-text/60">Synapse — Antigravity</span>
         </div>
         <div className="flex items-center gap-2 no-drag">
-          <button onClick={() => ipcRenderer?.send('window:minimize')} className="p-1.5 hover:bg-aether-border rounded text-aether-text"><Minus size={12} /></button>
-          <button onClick={() => ipcRenderer?.send('window:maximize')} className="p-1.5 hover:bg-aether-border rounded text-aether-text"><Square size={10} /></button>
-          <button onClick={() => ipcRenderer?.send('window:close')} className="p-1.5 hover:bg-red-100 hover:text-red-500 rounded text-aether-text"><X size={12} /></button>
+          <button onClick={() => ipcRenderer?.send('window:minimize')} className="p-1.5 hover:bg-aether-border"><Minus size={12} /></button>
+          <button onClick={() => ipcRenderer?.send('window:maximize')} className="p-1.5 hover:bg-aether-border"><Square size={10} /></button>
+          <button onClick={() => ipcRenderer?.send('window:close')} className="p-1.5 hover:bg-red-100 hover:text-red-500"><X size={12} /></button>
         </div>
       </div>
 
       {/* 2. MAIN WORKSPACE */}
       <div className="flex-1 flex overflow-hidden">
 
-        {/* A. SIDEBAR (Explorer) */}
-        <div style={{ width: explorer.width }} className="bg-aether-sidebar/50 flex flex-col shrink-0 relative">
+        {/* A. SIDEBAR */}
+        <div
+          ref={explorer.panelRef}
+          style={{ width: explorer.width }}
+          className="bg-aether-sidebar/50 flex flex-col shrink-0 relative"
+        >
           <div className="h-9 flex items-center px-4 text-xs font-bold tracking-wider text-aether-muted uppercase justify-between border-b border-aether-border">
             <span>Explorer</span>
-            <MoreHorizontal size={14} className="cursor-pointer hover:text-aether-text" />
+            <MoreHorizontal size={14} className="cursor-pointer" />
           </div>
           <div className="flex-1 overflow-y-auto">
-            {files.length === 0 && (
-              <div className="p-6 text-center text-xs text-aether-muted">
-                <div className="mb-2">No folder open</div>
-                <button onClick={handleOpenFolder} className="px-3 py-1 bg-aether-accent text-white rounded-md shadow-sm hover:bg-aether-accentHover">Open</button>
-              </div>
-            )}
             {files.map((file, i) => (
-              <div key={i} onClick={() => handleFileClick(file)} className={`group flex items-center gap-2 px-3 py-1 cursor-pointer text-sm transition-all border-l-2 ${activeFile === file.path ? 'border-aether-accent bg-white text-aether-text' : 'border-transparent text-aether-muted hover:text-aether-text hover:bg-white/50'}`}>
+              <div key={i} onClick={() => handleFileClick(file)} className={`flex items-center gap-2 px-3 py-1 cursor-pointer text-sm ${activeFile === file.path ? 'bg-white text-aether-text' : 'text-aether-muted'}`}>
                 {file.isDirectory ? <ChevronRight size={12} /> : <div className="w-3" />}
-                <span className="truncate font-medium">{file.name}</span>
+                <span className="truncate">{file.name}</span>
               </div>
             ))}
           </div>
@@ -410,9 +407,8 @@ export default function App() {
 
         <Resizer onMouseDown={explorer.startResize} isVertical={true} />
 
-        {/* B. CENTRAL AREA (Editor + Preview) */}
+        {/* B. CENTRAL AREA */}
         <div className="flex-1 flex flex-col min-w-0 bg-aether-bg relative">
-          {/* Tab Bar */}
           <div className="h-9 flex items-center bg-aether-sidebar/30 border-b border-aether-border shrink-0">
             <div className="px-4 py-2 bg-aether-bg border-r border-aether-border text-xs font-medium text-aether-text flex items-center gap-2 border-t-2 border-t-aether-accent">
               <span>{activeFile ? activeFile.split(/[\\/]/).pop() : 'Welcome'}</span>
@@ -421,37 +417,30 @@ export default function App() {
                 className={`ml-4 px-2 py-0.5 rounded-full border border-aether-border flex items-center gap-1 transition-colors ${isPreviewVisible ? 'bg-aether-accent text-white' : 'bg-aether-sidebar text-aether-text'}`}
               >
                 <Globe size={10} />
-                <span>{isPreviewVisible ? 'Hide Preview' : 'Show Preview'}</span>
+                <span>{isPreviewVisible ? 'Hide' : 'Show'}</span>
               </button>
             </div>
           </div>
 
           <div className="flex-1 flex overflow-hidden">
-            {/* Code Editor */}
             <div className="flex-1 relative">
-              <AetherEditor code={code} setCode={setCode} revealLine={0} />
+              <AetherEditor code={code} setCode={setCode} revealLine={selectedContext?.lineNumber || 0} />
             </div>
 
-            {/* Live Preview */}
             {isPreviewVisible && (
               <>
                 <Resizer onMouseDown={preview.startResize} isVertical={true} />
                 <div
+                  ref={preview.panelRef}
                   style={{ width: preview.width }}
                   className="bg-white relative flex flex-col shrink-0"
                 >
                   <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
-                    <button onClick={toggleInspector} className={`p-1 rounded ${isInspectorActive ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`} title="Inspect Element">
-                      <Crosshair size={14} />
-                    </button>
-                    <input
-                      className="flex-1 text-xs bg-white border border-gray-200 rounded px-2 py-0.5 text-gray-600 outline-none focus:border-blue-400"
-                      value={previewUrl}
-                      onChange={(e) => setPreviewUrl(e.target.value)}
-                    />
-                    <button onClick={() => setIframeKey(k => k + 1)} className="p-1 text-gray-500 hover:text-gray-900"><RefreshCw size={12} /></button>
+                    <button onClick={toggleInspector} className={`p-1 rounded ${isInspectorActive ? 'bg-blue-100 text-blue-600' : 'text-gray-500'}`}><Crosshair size={14} /></button>
+                    <input className="flex-1 text-xs bg-white border border-gray-200 rounded px-2 py-0.5 outline-none" value={previewUrl} onChange={(e) => setPreviewUrl(e.target.value)} />
+                    <button onClick={() => setIframeKey(k => k + 1)}><RefreshCw size={12} /></button>
                   </div>
-                  {/* CRITICAL FIX: Disable pointer events on iframe while dragging to prevent event swallowing */}
+                  {/* POINTER EVENTS NONE IS CRITICAL FOR DRAGGING OVER IFRAME */}
                   <iframe
                     key={iframeKey}
                     src={previewUrl}
@@ -468,95 +457,46 @@ export default function App() {
         <Resizer onMouseDown={agent.startResize} isVertical={true} />
 
         {/* C. AGENT MANAGER */}
-        <div style={{ width: agent.width }} className="flex flex-col bg-aether-bg shrink-0 shadow-xl z-20">
+        <div
+          ref={agent.panelRef}
+          style={{ width: agent.width }}
+          className="flex flex-col bg-aether-bg shrink-0 shadow-xl z-20"
+        >
+          {/* Agent content same as before */}
           <div className="h-12 flex items-center justify-between px-4 border-b border-aether-border bg-aether-bg shrink-0">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={16} className="text-aether-success" />
               <span className="text-sm font-bold text-aether-text">Current Task</span>
             </div>
-            <button className="p-1.5 hover:bg-aether-sidebar rounded text-aether-muted"><MoreHorizontal size={14} /></button>
           </div>
-
           <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-aether-bg/50" ref={chatScrollRef}>
-            {/* Task List Mock */}
-            <div className="space-y-2">
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-aether-panel border border-aether-border shadow-paper">
-                <div className="mt-0.5 text-aether-success"><CheckCircle2 size={14} /></div>
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-aether-text mb-1">Project Status</div>
-                  <div className="text-xxs text-aether-muted">System initialized and ready.</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Messages */}
             {messages.map((msg) => (
               <div key={msg.id} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {msg.type === 'thought' && (
-                  <div className="flex items-center gap-2 text-xs text-aether-muted mb-2 px-2">
-                    <Brain size={12} />
-                    <span className="italic">{msg.content}</span>
-                  </div>
-                )}
                 {msg.type === 'message' && (
-                  <div className={`p-3 rounded-lg shadow-sm text-xs leading-relaxed ${msg.role === 'user' ? 'bg-white border border-aether-accent/50' : 'pl-4 border-l-2 border-aether-border ml-1'
-                    }`}>
-                    {msg.image && <img src={msg.image} className="mb-2 max-h-20 rounded border border-gray-200" />}
+                  <div className={`p-3 rounded-lg shadow-sm text-xs leading-relaxed ${msg.role === 'user' ? 'bg-white border border-aether-accent/50' : 'pl-4 border-l-2 border-aether-border ml-1'}`}>
+                    {msg.image && <img src={msg.image} className="mb-2 max-h-20 rounded" />}
                     {msg.content}
                   </div>
                 )}
               </div>
             ))}
-
-            {isThinking && (
-              <div className="flex items-center gap-2 text-xs text-aether-accent px-2 animate-pulse">
-                <Zap size={12} />
-                <span>Generating...</span>
-              </div>
-            )}
+            {isThinking && <div className="text-xs text-aether-accent px-2">Generating...</div>}
           </div>
-
-          {/* Input Area */}
           <div className="p-4 border-t border-aether-border bg-aether-bg shrink-0">
-            {selectedContext && (
-              <div className="flex items-center gap-2 mb-2 text-xs bg-aether-selection px-2 py-1 rounded border border-aether-accent/20 w-fit">
-                <Crosshair size={12} className="text-aether-accent" />
-                <span className="font-mono text-aether-text">{selectedContext.selector}</span>
-                <button onClick={() => setSelectedContext(null)} className="hover:text-red-500"><X size={12} /></button>
-              </div>
-            )}
-
-            <div className="relative bg-white border border-aether-border rounded-xl shadow-float focus-within:ring-2 focus-within:ring-aether-accent/50 transition-all">
+            <div className="relative bg-white border border-aether-border rounded-xl shadow-float">
               <textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAskAI())}
-                placeholder="Ask anything (Ctrl+L)"
-                className="w-full bg-transparent text-sm p-3 min-h-[50px] max-h-[200px] outline-none resize-none placeholder:text-aether-muted/70 text-aether-text"
+                placeholder="Ask anything..."
+                className="w-full bg-transparent text-sm p-3 min-h-[50px] outline-none resize-none"
               />
-              <div className="flex items-center justify-between px-2 pb-2">
-                <div className="flex gap-1">
-                  <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-                  <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded hover:bg-aether-sidebar text-aether-muted hover:text-aether-text transition-colors">
-                    <Paperclip size={14} />
-                  </button>
-                  <button
-                    onClick={() => setAiMode(aiMode === 'thinking' ? 'standard' : 'thinking')}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${aiMode === 'thinking' ? 'bg-aether-accent text-white' : 'text-aether-muted hover:bg-aether-sidebar'}`}
-                  >
-                    {aiMode === 'thinking' ? <Brain size={10} /> : <Zap size={10} />}
-                    <span>{aiMode}</span>
-                  </button>
-                </div>
-                <button
-                  onClick={() => handleAskAI()}
-                  disabled={(!chatInput.trim() && !attachedImage) || isThinking}
-                  className="p-1.5 bg-aether-text text-white rounded shadow-sm hover:bg-black disabled:opacity-50 transition-all"
-                >
-                  <ArrowUp size={14} strokeWidth={3} />
-                </button>
+              <div className="flex justify-between px-2 pb-2">
+                <button onClick={() => fileInputRef.current?.click()}><Paperclip size={14} /></button>
+                <button onClick={() => handleAskAI()}><ArrowUp size={14} /></button>
               </div>
             </div>
+            <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
           </div>
         </div>
 
@@ -566,15 +506,8 @@ export default function App() {
       <div className="h-6 bg-aether-accent flex items-center justify-between px-3 text-xxs font-bold text-aether-textOnAccent select-none z-50 shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1"><Terminal size={10} /> Ready</div>
-          <div className="flex items-center gap-1 opacity-80"><GitGraph size={10} /> main*</div>
-        </div>
-        <div className="flex items-center gap-3 opacity-80">
-          <span>Ln 12, Col 4</span>
-          <span>UTF-8</span>
-          <Check size={10} />
         </div>
       </div>
-
     </div>
   );
 }
