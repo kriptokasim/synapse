@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Editor, { useMonaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import {
@@ -33,6 +33,52 @@ interface SelectedContext {
   lineNumber: number;
   snippet: string;
 }
+
+// --- HOOKS ---
+const useResizable = (initialWidth: number, minWidth: number, maxWidth: number, direction: 'left' | 'right' = 'right') => {
+  const [width, setWidth] = useState(initialWidth);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const startResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      let newWidth = direction === 'right'
+        ? e.clientX
+        : window.innerWidth - e.clientX;
+
+      if (newWidth < minWidth) newWidth = minWidth;
+      if (newWidth > maxWidth) newWidth = maxWidth;
+
+      setWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, minWidth, maxWidth, direction]);
+
+  return { width, startResize, isDragging, setWidth };
+};
 
 // --- COMPONENTS ---
 
@@ -101,7 +147,7 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
         overviewRulerBorder: false,
         renderLineHighlight: 'all',
         hideCursorInOverviewRuler: true,
-        automaticLayout: true, // Important for resize
+        automaticLayout: true,
         scrollBeyondLastLine: false,
         cursorBlinking: 'smooth',
         cursorSmoothCaretAnimation: 'on',
@@ -113,7 +159,7 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
 // --- MAIN APP ---
 export default function App() {
   // State
-  const [code, setCode] = useState('// Synapse Aether v3.3\n// Ready to code...');
+  const [code, setCode] = useState('// Synapse Aether v3.5\n// Ready to code...');
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
 
@@ -122,6 +168,22 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState('about:blank');
   const [iframeKey, setIframeKey] = useState(0);
   const [isInspectorActive, setIsInspectorActive] = useState(false);
+
+  // Resizable Panels
+  const explorer = useResizable(240, 150, 400, 'right');
+  const agent = useResizable(400, 300, 600, 'left');
+  const preview = useResizable(500, 200, 800, 'left'); // Preview is now resizable from left side relative to agent? No, it's in the middle.
+
+  // Layout Strategy:
+  // [Explorer] | [Editor (Flex)] | [Preview (Resizable)] | [Agent]
+  // Actually, Preview is usually between Editor and Agent.
+  // Let's make Preview resizable from its left edge? Or right edge?
+  // If Preview is to the right of Editor:
+  // [Explorer] [Resizer] [Editor] [Resizer] [Preview] [Resizer] [Agent]
+  // That's complex.
+  // Let's stick to: [Explorer] | [Middle Area] | [Agent]
+  // Middle Area = [Editor] | [Preview]
+  // So Preview needs a resizer on its LEFT if it's on the right of editor.
 
   // Agent State
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -282,11 +344,22 @@ export default function App() {
     }
   };
 
+  // Custom Resizer Component
+  const Resizer = ({ onMouseDown, isVertical = false }: { onMouseDown: any, isVertical?: boolean }) => (
+    <div
+      className={`hover:bg-aether-accent/50 transition-colors z-50 flex items-center justify-center ${isVertical ? 'w-1 cursor-col-resize h-full' : 'h-1 cursor-row-resize w-full'
+        }`}
+      onMouseDown={onMouseDown}
+    >
+      <div className={`bg-aether-border ${isVertical ? 'w-[1px] h-full' : 'h-[1px] w-full'}`} />
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-screen w-screen bg-aether-bg text-aether-text font-sans overflow-hidden selection:bg-aether-selection">
 
       {/* 1. TOP MENU BAR */}
-      <div className="h-8 flex items-center justify-between px-3 bg-aether-bg border-b border-aether-border drag-region z-50">
+      <div className="h-8 flex items-center justify-between px-3 bg-aether-bg border-b border-aether-border drag-region z-50 shrink-0">
         <div className="flex items-center gap-4 no-drag">
           <div className="flex gap-3 text-xs font-medium text-aether-text/80">
             <span className="hover:text-aether-accent cursor-pointer">File</span>
@@ -308,8 +381,8 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
 
         {/* A. SIDEBAR (Explorer) */}
-        <div className="w-60 bg-aether-sidebar/50 border-r border-aether-border flex flex-col shrink-0">
-          <div className="h-9 flex items-center px-4 text-xs font-bold tracking-wider text-aether-muted uppercase justify-between">
+        <div style={{ width: explorer.width }} className="bg-aether-sidebar/50 flex flex-col shrink-0 relative">
+          <div className="h-9 flex items-center px-4 text-xs font-bold tracking-wider text-aether-muted uppercase justify-between border-b border-aether-border">
             <span>Explorer</span>
             <MoreHorizontal size={14} className="cursor-pointer hover:text-aether-text" />
           </div>
@@ -329,10 +402,12 @@ export default function App() {
           </div>
         </div>
 
+        <Resizer onMouseDown={explorer.startResize} isVertical={true} />
+
         {/* B. CENTRAL AREA (Editor + Preview) */}
         <div className="flex-1 flex flex-col min-w-0 bg-aether-bg relative">
           {/* Tab Bar */}
-          <div className="h-9 flex items-center bg-aether-sidebar/30 border-b border-aether-border">
+          <div className="h-9 flex items-center bg-aether-sidebar/30 border-b border-aether-border shrink-0">
             <div className="px-4 py-2 bg-aether-bg border-r border-aether-border text-xs font-medium text-aether-text flex items-center gap-2 border-t-2 border-t-aether-accent">
               <span>{activeFile ? activeFile.split(/[\\/]/).pop() : 'Welcome'}</span>
               <button
@@ -346,34 +421,42 @@ export default function App() {
           </div>
 
           <div className="flex-1 flex overflow-hidden">
-            {/* Code Editor - Simplified Logic */}
-            <div className={`flex-1 relative border-r border-aether-border`}>
+            {/* Code Editor */}
+            <div className="flex-1 relative">
               <AetherEditor code={code} setCode={setCode} revealLine={0} />
             </div>
 
-            {/* Live Preview - Fixed Toggle Logic */}
-            <div
-              className={`bg-white relative flex flex-col border-l border-aether-border transition-all duration-300 ease-in-out shrink-0 ${isPreviewVisible ? 'w-[40%]' : 'w-0 border-l-0'
-                }`}
-            >            <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
-                <button onClick={toggleInspector} className={`p-1 rounded ${isInspectorActive ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`} title="Inspect Element">
-                  <Crosshair size={14} />
-                </button>
-                <input
-                  className="flex-1 text-xs bg-white border border-gray-200 rounded px-2 py-0.5 text-gray-600 outline-none focus:border-blue-400"
-                  value={previewUrl}
-                  onChange={(e) => setPreviewUrl(e.target.value)}
-                />
-                <button onClick={() => setIframeKey(k => k + 1)} className="p-1 text-gray-500 hover:text-gray-900"><RefreshCw size={12} /></button>
-              </div>
-              <iframe key={iframeKey} src={previewUrl} onLoad={handleIframeLoad} className="flex-1 w-full border-none" title="Preview" />
-            </div>
+            {/* Live Preview */}
+            {isPreviewVisible && (
+              <>
+                <Resizer onMouseDown={preview.startResize} isVertical={true} />
+                <div
+                  style={{ width: preview.width }}
+                  className="bg-white relative flex flex-col shrink-0"
+                >
+                  <div className="h-8 flex items-center px-2 bg-gray-50 border-b border-gray-200 gap-2 shrink-0">
+                    <button onClick={toggleInspector} className={`p-1 rounded ${isInspectorActive ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-200'}`} title="Inspect Element">
+                      <Crosshair size={14} />
+                    </button>
+                    <input
+                      className="flex-1 text-xs bg-white border border-gray-200 rounded px-2 py-0.5 text-gray-600 outline-none focus:border-blue-400"
+                      value={previewUrl}
+                      onChange={(e) => setPreviewUrl(e.target.value)}
+                    />
+                    <button onClick={() => setIframeKey(k => k + 1)} className="p-1 text-gray-500 hover:text-gray-900"><RefreshCw size={12} /></button>
+                  </div>
+                  <iframe key={iframeKey} src={previewUrl} onLoad={handleIframeLoad} className="flex-1 w-full border-none" title="Preview" />
+                </div>
+              </>
+            )}
           </div>
         </div>
 
+        <Resizer onMouseDown={agent.startResize} isVertical={true} />
+
         {/* C. AGENT MANAGER */}
-        <div className="w-[400px] flex flex-col bg-aether-bg border-l border-aether-border shrink-0 shadow-xl z-20">
-          <div className="h-12 flex items-center justify-between px-4 border-b border-aether-border bg-aether-bg">
+        <div style={{ width: agent.width }} className="flex flex-col bg-aether-bg shrink-0 shadow-xl z-20">
+          <div className="h-12 flex items-center justify-between px-4 border-b border-aether-border bg-aether-bg shrink-0">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={16} className="text-aether-success" />
               <span className="text-sm font-bold text-aether-text">Current Task</span>
@@ -421,7 +504,7 @@ export default function App() {
           </div>
 
           {/* Input Area */}
-          <div className="p-4 border-t border-aether-border bg-aether-bg">
+          <div className="p-4 border-t border-aether-border bg-aether-bg shrink-0">
             {selectedContext && (
               <div className="flex items-center gap-2 mb-2 text-xs bg-aether-selection px-2 py-1 rounded border border-aether-accent/20 w-fit">
                 <Crosshair size={12} className="text-aether-accent" />
@@ -467,7 +550,7 @@ export default function App() {
       </div>
 
       {/* 3. STATUS BAR */}
-      <div className="h-6 bg-aether-accent flex items-center justify-between px-3 text-xxs font-bold text-aether-textOnAccent select-none z-50">
+      <div className="h-6 bg-aether-accent flex items-center justify-between px-3 text-xxs font-bold text-aether-textOnAccent select-none z-50 shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1"><Terminal size={10} /> Ready</div>
           <div className="flex items-center gap-1 opacity-80"><GitGraph size={10} /> main*</div>
