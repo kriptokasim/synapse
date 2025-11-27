@@ -38,18 +38,24 @@ interface SelectedContext {
 const useResizable = (initialWidth: number, minWidth: number, maxWidth: number, direction: 'left' | 'right' = 'right') => {
   const [width, setWidth] = useState(initialWidth);
   const [isDragging, setIsDragging] = useState(false);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(0);
 
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
-  }, []);
+    startXRef.current = e.clientX;
+    startWidthRef.current = width;
+  }, [width]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging) return;
+
+      const delta = e.clientX - startXRef.current;
       let newWidth = direction === 'right'
-        ? e.clientX
-        : window.innerWidth - e.clientX;
+        ? startWidthRef.current + delta
+        : startWidthRef.current - delta;
 
       if (newWidth < minWidth) newWidth = minWidth;
       if (newWidth > maxWidth) newWidth = maxWidth;
