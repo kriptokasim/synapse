@@ -43,6 +43,7 @@ const useResizable = (initialWidth: number, minWidth: number, maxWidth: number, 
 
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // Stop propagation to prevent selecting text etc
     setIsDragging(true);
     startXRef.current = e.clientX;
     startWidthRef.current = width;
@@ -53,6 +54,8 @@ const useResizable = (initialWidth: number, minWidth: number, maxWidth: number, 
       if (!isDragging) return;
 
       const delta = e.clientX - startXRef.current;
+      // If resizing from the right (Explorer), dragging right (+) increases width.
+      // If resizing from the left (Agent/Preview), dragging left (-) increases width.
       let newWidth = direction === 'right'
         ? startWidthRef.current + delta
         : startWidthRef.current - delta;
@@ -64,7 +67,9 @@ const useResizable = (initialWidth: number, minWidth: number, maxWidth: number, 
     };
 
     const handleMouseUp = () => {
-      setIsDragging(false);
+      if (isDragging) {
+        setIsDragging(false);
+      }
     };
 
     if (isDragging) {
@@ -176,20 +181,15 @@ export default function App() {
   const [isInspectorActive, setIsInspectorActive] = useState(false);
 
   // Resizable Panels
+  // Explorer: Resizes from right edge. Drag Right -> Grow.
   const explorer = useResizable(240, 150, 400, 'right');
+  // Agent: Resizes from left edge. Drag Left -> Grow.
   const agent = useResizable(400, 300, 600, 'left');
-  const preview = useResizable(500, 200, 800, 'left'); // Preview is now resizable from left side relative to agent? No, it's in the middle.
+  // Preview: Resizes from left edge. Drag Left -> Grow (Into editor space).
+  const preview = useResizable(500, 200, 800, 'left');
 
-  // Layout Strategy:
-  // [Explorer] | [Editor (Flex)] | [Preview (Resizable)] | [Agent]
-  // Actually, Preview is usually between Editor and Agent.
-  // Let's make Preview resizable from its left edge? Or right edge?
-  // If Preview is to the right of Editor:
-  // [Explorer] [Resizer] [Editor] [Resizer] [Preview] [Resizer] [Agent]
-  // That's complex.
-  // Let's stick to: [Explorer] | [Middle Area] | [Agent]
-  // Middle Area = [Editor] | [Preview]
-  // So Preview needs a resizer on its LEFT if it's on the right of editor.
+  // Check if ANY panel is being dragged to disable iframe interactions globally
+  const isAnyDragging = explorer.isDragging || agent.isDragging || preview.isDragging;
 
   // Agent State
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -451,7 +451,14 @@ export default function App() {
                     />
                     <button onClick={() => setIframeKey(k => k + 1)} className="p-1 text-gray-500 hover:text-gray-900"><RefreshCw size={12} /></button>
                   </div>
-                  <iframe key={iframeKey} src={previewUrl} onLoad={handleIframeLoad} className="flex-1 w-full border-none" title="Preview" />
+                  {/* CRITICAL FIX: Disable pointer events on iframe while dragging to prevent event swallowing */}
+                  <iframe
+                    key={iframeKey}
+                    src={previewUrl}
+                    onLoad={handleIframeLoad}
+                    className={`flex-1 w-full border-none ${isAnyDragging ? 'pointer-events-none' : ''}`}
+                    title="Preview"
+                  />
                 </div>
               </>
             )}
