@@ -64,6 +64,7 @@ export const SplitView: React.FC<SplitViewProps> = ({
                         <Pane
                             {...pane.props}
                             size={pane.props.flex ? undefined : size}
+                            orientation={orientation}
                         />
 
                         {!isLast && !pane.props.flex && (

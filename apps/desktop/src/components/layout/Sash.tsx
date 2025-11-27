@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 
 interface SashProps {
     onResizeStart: () => void;
@@ -18,6 +18,17 @@ export const Sash: React.FC<SashProps> = ({
     const [isResizing, setIsResizing] = useState(false);
     const startRef = useRef<{ x: number; y: number } | null>(null);
 
+    // Use refs to avoid stale closures in global listeners
+    const onResizeRef = useRef(onResize);
+    const onResizeEndRef = useRef(onResizeEnd);
+    const onResizeStartRef = useRef(onResizeStart);
+
+    useEffect(() => {
+        onResizeRef.current = onResize;
+        onResizeEndRef.current = onResizeEnd;
+        onResizeStartRef.current = onResizeStart;
+    }, [onResize, onResizeEnd, onResizeStart]);
+
     // Global event handlers for drag operation
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!startRef.current) return;
@@ -28,13 +39,13 @@ export const Sash: React.FC<SashProps> = ({
         // For this simplified version, we just pass the relevant delta
         const delta = orientation === 'vertical' ? deltaX : deltaY;
 
-        onResize(delta);
-    }, [onResize, orientation]);
+        onResizeRef.current(delta);
+    }, [orientation]);
 
     const handleMouseUp = useCallback(() => {
         setIsResizing(false);
         startRef.current = null;
-        onResizeEnd();
+        onResizeEndRef.current();
 
         // Cleanup global listeners
         window.removeEventListener('mousemove', handleMouseMove);
@@ -49,7 +60,7 @@ export const Sash: React.FC<SashProps> = ({
         for (let i = 0; i < iframes.length; i++) {
             iframes[i].style.pointerEvents = '';
         }
-    }, [onResizeEnd, handleMouseMove]);
+    }, [handleMouseMove]);
 
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -57,7 +68,7 @@ export const Sash: React.FC<SashProps> = ({
 
         setIsResizing(true);
         startRef.current = { x: e.clientX, y: e.clientY };
-        onResizeStart();
+        onResizeStartRef.current();
 
         // Add global listeners
         window.addEventListener('mousemove', handleMouseMove);
@@ -72,13 +83,13 @@ export const Sash: React.FC<SashProps> = ({
         for (let i = 0; i < iframes.length; i++) {
             iframes[i].style.pointerEvents = 'none';
         }
-    }, [orientation, onResizeStart, handleMouseMove, handleMouseUp]);
+    }, [orientation, handleMouseMove, handleMouseUp]);
 
     return (
         <div
             className={`z-50 flex items-center justify-center hover:bg-aether-accent transition-colors select-none ${orientation === 'vertical'
-                    ? 'w-4 h-full -mx-2 cursor-col-resize'
-                    : 'h-4 w-full -my-2 cursor-row-resize'
+                ? 'w-4 h-full -mx-2 cursor-col-resize'
+                : 'h-4 w-full -my-2 cursor-row-resize'
                 } ${className} ${isResizing ? 'bg-aether-accent' : ''}`}
             onMouseDown={handleMouseDown}
         >

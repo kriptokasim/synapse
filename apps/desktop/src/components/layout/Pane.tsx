@@ -7,29 +7,40 @@ export interface PaneProps {
     defaultSize?: number;
     flex?: boolean; // If true, this pane takes up remaining space
     visible?: boolean;
+    orientation?: 'vertical' | 'horizontal';
     children: React.ReactNode;
     className?: string;
     style?: React.CSSProperties;
 }
 
-export const Pane: React.FC<PaneProps & { size?: number }> = ({
+export const Pane: React.FC<PaneProps & { size?: number; orientation?: 'vertical' | 'horizontal' }> = ({
     size,
     flex,
     visible = true,
     children,
     className = '',
+    orientation = 'vertical',
     style
 }) => {
     if (!visible) return null;
 
+    const styleProps: React.CSSProperties = {
+        flex: flex ? '1 1 0%' : 'none',
+        ...style
+    };
+
+    if (!flex) {
+        if (orientation === 'vertical') {
+            styleProps.width = size;
+        } else {
+            styleProps.height = size;
+        }
+    }
+
     return (
         <div
-            className={`relative h-full flex-shrink-0 overflow-hidden ${className}`}
-            style={{
-                width: flex ? '100%' : size,
-                flex: flex ? '1 1 0%' : 'none',
-                ...style
-            }}
+            className={`relative flex-shrink-0 overflow-hidden ${className}`}
+            style={styleProps}
         >
             {children}
         </div>
