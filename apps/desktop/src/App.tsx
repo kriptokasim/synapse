@@ -164,30 +164,72 @@ export default function App() {
     const handler = async (event: MessageEvent) => {
       if (event.data.type === 'ELEMENT_CLICKED') {
         const { tag, selector, snippet } = event.data.payload;
+        console.log('[App] Element clicked:', { tag, selector });
+
         setIsInspectorActive(false);
-        document.querySelector('iframe')?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: false }, '*');
+
+        // Use specific selector
+        const iframe = document.querySelector('#preview iframe') as HTMLIFrameElement;
+        iframe?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: false }, '*');
+
         setShowPreview(true);
-        setSelectedContext({ tag, selector, lineNumber: 1, snippet });
+
+        // Find line number
+        let lineNumber = 1;
+        if (code && snippet) {
+          // Try to find the exact snippet
+          const lines = code.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes(tag) && (lines[i].includes(`id="${selector.split('#')[1]}"`) || lines[i].includes(`class="${selector.split('.')[1]}"`))) {
+              lineNumber = i + 1;
+              break;
+            }
+          }
+          // Fallback: simple tag search if specific ID/Class not found
+          if (lineNumber === 1) {
+            const index = code.indexOf(`<${tag}`);
+            if (index !== -1) {
+              lineNumber = code.substring(0, index).split('\n').length;
+            }
+          }
+        }
+
+        setSelectedContext({ tag, selector, lineNumber, snippet });
+
+        // Populate chat input
+        setChatInput(`Look at this ${tag} (${selector}):\n\`\`\`html\n${snippet}\n\`\`\`\nHow can I improve it?`);
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [code]); // Add code dependency to search it
 
   const toggleInspector = () => {
+    console.log('[App] Toggling inspector. Current state:', isInspectorActive);
     setIsInspectorActive(!isInspectorActive);
-    document.querySelector('iframe')?.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: !isInspectorActive }, '*');
+
+    const iframe = document.querySelector('#preview iframe') as HTMLIFrameElement;
+    if (iframe) {
+      console.log('[App] Found iframe, sending message. Pointer events:', iframe.style.pointerEvents);
+      iframe.contentWindow?.postMessage({ type: 'TOGGLE_INSPECTOR', active: !isInspectorActive }, '*');
+    } else {
+      console.error('[App] Iframe not found!');
+    }
   };
 
   const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+    console.log('[App] Iframe loaded');
     try {
       const doc = e.currentTarget.contentDocument;
       if (doc) {
+        console.log('[App] Injecting inspector script');
         const script = doc.createElement('script');
         script.text = INSPECTOR_SCRIPT;
         doc.body.appendChild(script);
       }
-    } catch (e) { }
+    } catch (e) {
+      console.error('[App] Failed to inject inspector script', e);
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,7 +265,17 @@ export default function App() {
       }
 
       const newCode = await ai.generateCode(prompt, code, { mode: aiMode, image: userMsg.image });
-      const cleanCode = newCode.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
+
+      // Robust code extraction:
+      // 1. Try to find a code block
+      const codeBlockMatch = newCode.match(/```(?:tsx|jsx|typescript|javascript|html)?\n([\s\S]*?)```/);
+      let cleanCode = codeBlockMatch ? codeBlockMatch[1] : newCode;
+
+      // 2. Fallback cleanup if no block found (legacy behavior)
+      if (!codeBlockMatch) {
+        cleanCode = cleanCode.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
+      }
+
       setCode(cleanCode);
 
       if (activeFile) {
@@ -231,9 +283,10 @@ export default function App() {
         await window.synapse.writeFile(activeFile, cleanCode);
         setIframeKey(k => k + 1);
       }
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: 'Done.', type: 'message' }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: 'Done. Code updated.', type: 'message' }]);
     } catch (e: any) {
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: 'Error.', type: 'message' }]);
+      console.error('AI Error:', e);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: `Error: ${e.message || 'Unknown error'}`, type: 'message' }]);
     } finally {
       setIsThinking(false);
     }

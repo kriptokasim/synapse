@@ -14,6 +14,7 @@ export interface PaneProps {
 }
 
 export const Pane: React.FC<PaneProps & { size?: number; orientation?: 'vertical' | 'horizontal' }> = ({
+    id,
     size,
     flex,
     visible = true,
@@ -47,6 +48,7 @@ export const Pane: React.FC<PaneProps & { size?: number; orientation?: 'vertical
 
     return (
         <div
+            id={id}
             className={`relative flex-shrink-0 overflow-hidden ${className}`}
             style={styleProps}
         >
