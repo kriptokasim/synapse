@@ -1,1 +1,14 @@
-"use strict";const r=require("electron");console.log("[Preload] Initializing Synapse Bridge...");const i={openDirectory:()=>r.ipcRenderer.invoke("dialog:openDirectory"),readDirectory:e=>r.ipcRenderer.invoke("fs:readDirectory",e),readFile:e=>r.ipcRenderer.invoke("fs:readFile",e),writeFile:(e,n)=>r.ipcRenderer.invoke("fs:writeFile",e,n)};try{r.contextBridge.exposeInMainWorld("synapse",i)}catch{window.synapse=i}
+"use strict";
+const electron = require("electron");
+console.log("[Preload] Initializing Synapse Bridge...");
+const api = {
+  openDirectory: () => electron.ipcRenderer.invoke("dialog:openDirectory"),
+  readDirectory: (path) => electron.ipcRenderer.invoke("fs:readDirectory", path),
+  readFile: (path) => electron.ipcRenderer.invoke("fs:readFile", path),
+  writeFile: (path, content) => electron.ipcRenderer.invoke("fs:writeFile", path, content)
+};
+try {
+  electron.contextBridge.exposeInMainWorld("synapse", api);
+} catch (error) {
+  window.synapse = api;
+}
