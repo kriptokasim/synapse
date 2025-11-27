@@ -22,10 +22,12 @@ export const Pane: React.FC<PaneProps & { size?: number; orientation?: 'vertical
     orientation = 'vertical',
     style
 }) => {
-    if (!visible) return null;
+    // CHANGE: Do not return null. Render it hidden instead.
+    // if (!visible) return null;
 
     const styleProps: React.CSSProperties = {
         flex: flex ? '1 1 0%' : 'none',
+        display: visible ? 'block' : 'none',
         ...style
     };
 
