@@ -8,11 +8,55 @@ import {
   ChevronRight, MoreHorizontal,
   Terminal, CheckCircle2, GitGraph
 } from 'lucide-react';
-import { SynapseFactory } from './ai/UniversalGateway';
 import type { AIModelMode } from './ai/UniversalGateway';
 import { INSPECTOR_SCRIPT } from './ai/inspector';
 import { SplitView } from './components/layout/SplitView';
 import { Pane } from './components/layout/Pane';
+import { aiCore } from './ai/serviceContainer';
+import { MonacoEditorAdapter } from './ai/adapters';
+import type { LLMMessage } from '@synapse/ai-core';
+
+const QuickEditModal = ({ isOpen, onClose, onSubmit }: { isOpen: boolean; onClose: () => void; onSubmit: (instruction: string) => void }) => {
+  const [instruction, setInstruction] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      setInstruction('');
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[500px] bg-white rounded-lg shadow-2xl border border-aether-accent p-4 animate-in fade-in zoom-in-95 duration-200">
+      <div className="flex items-center gap-2 mb-2 text-xs font-bold text-aether-accent uppercase tracking-wider">
+        <Zap size={14} />
+        <span>Quick Edit Selection</span>
+      </div>
+      <input
+        ref={inputRef}
+        value={instruction}
+        onChange={(e) => setInstruction(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            onSubmit(instruction);
+          }
+          if (e.key === 'Escape') onClose();
+        }}
+        placeholder="Describe how to change the code..."
+        className="w-full bg-gray-50 border border-gray-200 rounded p-2 text-sm outline-none focus:border-aether-accent focus:ring-1 focus:ring-aether-accent/50 text-aether-text"
+      />
+      <div className="flex justify-end gap-2 mt-3">
+        <button onClick={onClose} className="px-3 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded">Cancel</button>
+        <button onClick={() => onSubmit(instruction)} className="px-3 py-1 text-xs bg-aether-accent text-white rounded hover:bg-aether-accentHover font-medium">Generate</button>
+      </div>
+    </div>
+  );
+};
 
 // Electron Interop
 const electron = window.require ? window.require('electron') : null;
@@ -36,7 +80,7 @@ interface SelectedContext {
   snippet: string;
 }
 
-const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: any, revealLine: number | null }) => {
+const AetherEditor = ({ code, setCode, revealLine, onTriggerQuickEdit, onEditorMount }: { code: string, setCode: any, revealLine: number | null, onTriggerQuickEdit: () => void, onEditorMount: (editor: any) => void }) => {
   const monacoInstance = useMonaco();
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -69,6 +113,20 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
   }, [monacoInstance]);
 
   useEffect(() => {
+    if (editorRef.current && monacoInstance) {
+      // Register Quick Edit Action
+      editorRef.current.addAction({
+        id: 'quick-edit',
+        label: 'Quick Edit Selection',
+        keybindings: [monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyK],
+        run: () => {
+          onTriggerQuickEdit();
+        }
+      });
+    }
+  }, [monacoInstance, onTriggerQuickEdit]);
+
+  useEffect(() => {
     if (editorRef.current && revealLine && monacoInstance) {
       const editor = editorRef.current;
       editor.revealLineInCenter(revealLine);
@@ -89,7 +147,10 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
       defaultLanguage="typescript"
       value={code}
       onChange={(val) => setCode(val || '')}
-      onMount={(editor) => { editorRef.current = editor; }}
+      onMount={(editor) => {
+        editorRef.current = editor;
+        onEditorMount(editor);
+      }}
       options={{
         minimap: { enabled: false },
         fontFamily: "'JetBrains Mono', monospace",
@@ -112,6 +173,8 @@ const AetherEditor = ({ code, setCode, revealLine }: { code: string, setCode: an
 // --- MAIN APP ---
 export default function App() {
   const [showPreview, setShowPreview] = useState(true);
+  const [isQuickEditOpen, setIsQuickEditOpen] = useState(false);
+  const editorInstanceRef = useRef<any>(null);
 
   // --- APP LOGIC (Previously existing) ---
   const [code, setCode] = useState('// Synapse Aether v4.0\n// Ready to code...');
@@ -243,6 +306,13 @@ export default function App() {
 
   const handleAskAI = async () => {
     if ((!chatInput.trim() && !attachedImage) || isThinking) return;
+
+    // Map to LLMMessage
+    const history: LLMMessage[] = messages.map(m => ({
+      role: m.role === 'model' ? 'assistant' : 'user',
+      content: m.content
+    }));
+
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -257,38 +327,52 @@ export default function App() {
 
     try {
       const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
-      const ai = SynapseFactory.create('gemini', apiKey);
 
-      let prompt = `FILENAME: ${activeFile || 'untitled'}\nREQUEST: "${userMsg.content}"`;
-      if (selectedContext) {
-        prompt += `\nCONTEXT: Element ${selectedContext.selector}\nCODE: ${selectedContext.snippet}`;
-      }
+      // Use ChatService
+      const response = await aiCore.chatService.chat(history, userMsg.content, {
+        modelId: aiMode === 'thinking' ? 'gemini-2.0-flash-thinking-exp-1219' : 'gemini-2.0-flash-exp', // Example mapping
+        apiKey
+      });
 
-      const newCode = await ai.generateCode(prompt, code, { mode: aiMode, image: userMsg.image });
-
-      // Robust code extraction:
-      // 1. Try to find a code block
-      const codeBlockMatch = newCode.match(/```(?:tsx|jsx|typescript|javascript|html)?\n([\s\S]*?)```/);
-      let cleanCode = codeBlockMatch ? codeBlockMatch[1] : newCode;
-
-      // 2. Fallback cleanup if no block found (legacy behavior)
-      if (!codeBlockMatch) {
-        cleanCode = cleanCode.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
-      }
-
-      setCode(cleanCode);
-
-      if (activeFile) {
-        // @ts-ignore
-        await window.synapse.writeFile(activeFile, cleanCode);
-        setIframeKey(k => k + 1);
-      }
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: 'Done. Code updated.', type: 'message' }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: response.content, type: 'message' }]);
     } catch (e: any) {
       console.error('AI Error:', e);
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: `Error: ${e.message || 'Unknown error'}`, type: 'message' }]);
     } finally {
       setIsThinking(false);
+    }
+  };
+
+  const handleQuickEditSubmit = async (instruction: string) => {
+    setIsQuickEditOpen(false);
+    if (!editorInstanceRef.current) return;
+
+    try {
+      const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+      const adapter = new MonacoEditorAdapter(editorInstanceRef.current);
+
+      const patch = await aiCore.quickEditService.quickEdit(adapter, instruction, {
+        modelId: 'gemini-2.0-flash-exp',
+        apiKey
+      });
+
+      // Apply patch
+      // For now, we just replace the selection or file
+      // QuickEditService returns newContent for the selection
+      const selection = editorInstanceRef.current.getSelection();
+      if (selection) {
+        editorInstanceRef.current.executeEdits('quick-edit', [{
+          range: selection,
+          text: patch.newContent,
+          forceMoveMarkers: true
+        }]);
+      } else {
+        setCode(patch.newContent);
+      }
+
+    } catch (e) {
+      console.error('Quick Edit Error:', e);
+      alert('Quick Edit failed: ' + e);
     }
   };
 
@@ -361,7 +445,18 @@ export default function App() {
               <SplitView storageKey="center-layout" orientation="vertical" className="flex-1">
                 {/* Editor (Flex) */}
                 <Pane id="editor" flex className="relative h-full">
-                  <AetherEditor code={code} setCode={setCode} revealLine={selectedContext?.lineNumber || 0} />
+                  <AetherEditor
+                    code={code}
+                    setCode={setCode}
+                    revealLine={selectedContext?.lineNumber || 0}
+                    onTriggerQuickEdit={() => setIsQuickEditOpen(true)}
+                    onEditorMount={(editor) => editorInstanceRef.current = editor}
+                  />
+                  <QuickEditModal
+                    isOpen={isQuickEditOpen}
+                    onClose={() => setIsQuickEditOpen(false)}
+                    onSubmit={handleQuickEditSubmit}
+                  />
                 </Pane>
 
                 {/* Preview (Conditional + Resizable) */}

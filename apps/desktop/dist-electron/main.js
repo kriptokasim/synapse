@@ -37,6 +37,10 @@ function createWindow() {
   } else {
     win.loadFile(path.join(process.env.DIST, "index.html"));
   }
+  win.webContents.on("console-message", (event, level, message, line, sourceId) => {
+    const levels = ["DEBUG", "INFO", "WARN", "ERROR"];
+    console.log(`[Renderer][${levels[level]}] ${message} (${sourceId}:${line})`);
+  });
   electron.ipcMain.on("window:minimize", () => win?.minimize());
   electron.ipcMain.on("window:maximize", () => {
     if (win?.isMaximized()) win.unmaximize();

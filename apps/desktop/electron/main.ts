@@ -36,6 +36,12 @@ function createWindow() {
         win.loadFile(path.join(process.env.DIST!, 'index.html'));
     }
 
+    // Pipe renderer logs to terminal
+    win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+        console.log(`[Renderer][${levels[level]}] ${message} (${sourceId}:${line})`);
+    });
+
     // --- IPC WINDOW CONTROLS ---
     ipcMain.on('window:minimize', () => win?.minimize());
     ipcMain.on('window:maximize', () => {
