@@ -326,11 +326,25 @@ export default function App() {
     setIsThinking(true);
 
     try {
-      const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+      const googleKey = import.meta.env.VITE_GOOGLE_API_KEY;
+      // const openaiKey = import.meta.env.VITE_OPENAI_API_KEY;
+      // const anthropicKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+
+      // Determine model and key
+      let modelId = 'gemini-2.0-flash-exp';
+      let apiKey = googleKey;
+
+      if (aiMode === 'thinking') {
+        modelId = 'gemini-2.0-flash-thinking-exp-1219';
+        apiKey = googleKey;
+      }
+      // Example of how we'd switch (future UI should allow selection)
+      // else if (aiMode === 'gpt4') { modelId = 'gpt-4o'; apiKey = openaiKey; }
+      // else if (aiMode === 'claude') { modelId = 'claude-3-5-sonnet-20241022'; apiKey = anthropicKey; }
 
       // Use ChatService
       const response = await aiCore.chatService.chat(history, userMsg.content, {
-        modelId: aiMode === 'thinking' ? 'gemini-2.0-flash-thinking-exp-1219' : 'gemini-2.0-flash-exp', // Example mapping
+        modelId,
         apiKey
       });
 
@@ -348,12 +362,14 @@ export default function App() {
     if (!editorInstanceRef.current) return;
 
     try {
-      const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+      const googleKey = import.meta.env.VITE_GOOGLE_API_KEY;
+      // const openaiKey = import.meta.env.VITE_OPENAI_API_KEY;
+
       const adapter = new MonacoEditorAdapter(editorInstanceRef.current);
 
       const patch = await aiCore.quickEditService.quickEdit(adapter, instruction, {
         modelId: 'gemini-2.0-flash-exp',
-        apiKey
+        apiKey: googleKey
       });
 
       // Apply patch
