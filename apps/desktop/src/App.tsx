@@ -180,7 +180,7 @@ export default function App() {
   const [code, setCode] = useState('// Synapse Aether v4.0\n// Ready to code...');
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [files, setFiles] = useState<any[]>([]);
-  const [previewUrl, setPreviewUrl] = useState('about:blank');
+  const [previewUrl, setPreviewUrl] = useState('http://localhost:8000');
   const [iframeKey, setIframeKey] = useState(0);
   const [isInspectorActive, setIsInspectorActive] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {

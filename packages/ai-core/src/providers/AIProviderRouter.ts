@@ -40,6 +40,11 @@ export class AIProviderRouter {
             if (openai) return openai;
         }
 
+        if (config?.modelId?.startsWith('gemini')) {
+            const gemini = this.providers.get('gemini');
+            if (gemini) return gemini;
+        }
+
         return this.providers.get(this.defaultProviderId)!;
     }
 }

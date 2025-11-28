@@ -1,7 +1,9 @@
+
 import {
     AIProviderRouter,
     OpenAIProvider,
     AnthropicProvider,
+    GeminiProvider,
     ContextService,
     WorkspaceService,
     QuickEditService,
@@ -25,6 +27,7 @@ class AICoreServices {
         this.router = new AIProviderRouter();
         this.router.registerProvider(new OpenAIProvider());
         this.router.registerProvider(new AnthropicProvider());
+        this.router.registerProvider(new GeminiProvider());
 
         // Initialize Context
         const fs = new SynapseFileSystem();
@@ -35,6 +38,8 @@ class AICoreServices {
         this.quickEditService = new QuickEditService(this.router, this.contextService);
         this.chatService = new ChatService(this.router, this.contextService);
         this.agentService = new AgentService(this.router, this.workspaceService);
+
+        console.log('[AICore] Services Initialized');
     }
 
     public static getInstance(): AICoreServices {
