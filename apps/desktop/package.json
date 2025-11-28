@@ -14,6 +14,7 @@
     "@google/generative-ai": "^0.24.1",
     "@monaco-editor/react": "^4.7.0",
     "@synapse/ai-core": "workspace:*",
+    "@synapse/settings": "workspace:*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.555.0",
     "monaco-editor": "^0.55.1",

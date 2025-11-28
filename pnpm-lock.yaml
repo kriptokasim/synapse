@@ -47,6 +47,9 @@ importers:
       '@synapse/ai-core':
         specifier: workspace:*
         version: link:../../packages/ai-core
+      '@synapse/settings':
+        specifier: workspace:*
+        version: link:../../packages/settings
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -132,6 +135,15 @@ importers:
         version: 11.0.0
       typescript:
         specifier: ^5.0.0
+        version: 5.9.3
+
+  packages/settings:
+    devDependencies:
+      '@types/uuid':
+        specifier: ^9.0.8
+        version: 9.0.8
+      typescript:
+        specifier: ^5.3.3
         version: 5.9.3
 
 packages:
@@ -791,6 +803,9 @@ packages:
   '@types/uuid@11.0.0':
     resolution: {integrity: sha512-HVyk8nj2m+jcFRNazzqyVKiZezyhDKrGUA3jlEcg/nZ6Ms+qHwocba1Y/AaVaznJTAM9xpdFSh+ptbNrhOGvZA==}
     deprecated: This is a stub types definition. uuid provides its own type definitions, so you do not need this installed.
+
+  '@types/uuid@9.0.8':
+    resolution: {integrity: sha512-jg+97EGIcY9AGHJJRaaPVgetKDsrTgbRjQ5Msgjh/DQKEFl0DtyRr/VCOyD1T2R1MNeWPK/u7JoGhlDZnKBAfA==}
 
   '@types/verror@1.10.11':
     resolution: {integrity: sha512-RlDm9K7+o5stv0Co8i8ZRGxDbrTxhJtgjqjFyVh/tXQyl/rYtTKlnTvZ88oSTeYREWurwx20Js4kTuKCsFkUtg==}
@@ -3362,6 +3377,8 @@ snapshots:
   '@types/uuid@11.0.0':
     dependencies:
       uuid: 13.0.0
+
+  '@types/uuid@9.0.8': {}
 
   '@types/verror@1.10.11':
     optional: true

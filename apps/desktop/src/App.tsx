@@ -15,6 +15,11 @@ import { Pane } from './components/layout/Pane';
 import { aiCore } from './ai/serviceContainer';
 import { MonacoEditorAdapter } from './ai/adapters';
 import type { LLMMessage } from '@synapse/ai-core';
+import { MenuBar } from './components/MenuBar';
+import { SettingsDialog } from './components/settings/SettingsDialog';
+import { useSettings } from './settings/useSettings';
+import { updateSettings } from '@synapse/settings';
+import { registerCommand } from './commands/commandRegistry';
 
 const QuickEditModal = ({ isOpen, onClose, onSubmit }: { isOpen: boolean; onClose: () => void; onSubmit: (instruction: string) => void }) => {
   const [instruction, setInstruction] = useState('');
@@ -199,6 +204,51 @@ export default function App() {
     localStorage.setItem('synapse_chat_history', JSON.stringify(messages));
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
   }, [messages]);
+
+  // Settings
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const settings = useSettings();
+
+  // Register Commands
+  useEffect(() => {
+    registerCommand('file.new', () => {
+      setCode('');
+      setActiveFile(null);
+    });
+    registerCommand('file.openFolder', handleOpenFolder);
+    registerCommand('file.save', async () => {
+      if (activeFile) {
+        // @ts-ignore
+        await window.synapse.writeFile(activeFile, code);
+      }
+    });
+    registerCommand('file.exit', () => window.close());
+
+    registerCommand('ai.quickEditSelection', () => setIsQuickEditOpen(true));
+    registerCommand('ai.openChat', () => {
+      // Focus chat input if possible, or just ensure panel is visible
+    });
+
+    registerCommand('settings.open', () => setIsSettingsOpen(true));
+    registerCommand('settings.openModels', () => setIsSettingsOpen(true)); // Can pass tab later
+
+    registerCommand('view.togglePreview', () => setShowPreview(p => !p));
+    registerCommand('view.toggleSidebar', () => { /* Implement toggle logic if needed */ });
+
+    return () => {
+      // Cleanup if needed, though unregistering isn't strictly necessary for app-level commands
+    };
+  }, [activeFile, code]);
+
+  // Apply Settings
+  useEffect(() => {
+    if (editorInstanceRef.current) {
+      editorInstanceRef.current.updateOptions({
+        fontSize: settings.editor.fontSize,
+        tabSize: settings.editor.tabSize,
+      });
+    }
+  }, [settings.editor]);
 
   const handleOpenFolder = async () => {
     try {
@@ -399,11 +449,7 @@ export default function App() {
       {/* TOP MENU BAR */}
       <div className="h-8 flex items-center justify-between px-3 bg-aether-bg border-b border-aether-border drag-region z-50 shrink-0">
         <div className="flex items-center gap-4 no-drag">
-          <div className="flex gap-3 text-xs font-medium text-aether-text/80">
-            <span className="hover:text-aether-accent cursor-pointer">File</span>
-            <span className="hover:text-aether-accent cursor-pointer">Edit</span>
-            <span className="hover:text-aether-accent cursor-pointer">View</span>
-          </div>
+          <MenuBar />
         </div>
         <div className="flex-1 flex justify-center no-drag absolute left-1/2 -translate-x-1/2">
           <span className="text-xs font-bold tracking-wide text-aether-text/60">Synapse — Antigravity</span>
@@ -472,6 +518,12 @@ export default function App() {
                     isOpen={isQuickEditOpen}
                     onClose={() => setIsQuickEditOpen(false)}
                     onSubmit={handleQuickEditSubmit}
+                  />
+                  <SettingsDialog
+                    open={isSettingsOpen}
+                    settings={settings}
+                    onClose={() => setIsSettingsOpen(false)}
+                    onSave={(newSettings) => updateSettings(newSettings)}
                   />
                 </Pane>
 
